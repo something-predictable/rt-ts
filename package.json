@@ -1,12 +1,26 @@
 {
   "name": "rt-ts",
+  "version": "0.0.1",
   "type": "module",
-  "private": true,
+  "license": "MIT",
   "engines": {
     "node": ">=22"
   },
+  "files": [
+    "/*.js",
+    "**/lib/*.js"
+  ],
+  "exports": {
+    ".": "./index.js"
+  },
   "scripts": {
-    "start": "riddance-watch"
+    "start": "riddance-watch",
+    "prepack": "riddance-build",
+    "prepublishOnly": "riddance-prepublish",
+    "postpublish": "riddance-sync"
+  },
+  "dependencies": {
+    "typescript": "5.9.3"
   },
   "devDependencies": {
     "@riddance/env": "0.9.7"
