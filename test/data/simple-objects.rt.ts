@@ -38,6 +38,29 @@ export function isT(u: unknown) {
 }
 assert<[]>(isInferredBy(isT))
 
+export function isTS(u: unknown) {
+    return Array.isArray(u) && inferTupleMember(u, 1, 0, u => typeof u === 'string')
+}
+assert<[string]>(isInferredBy(isTS))
+
+export function isTSS(u: unknown) {
+    return (
+        Array.isArray(u) &&
+        inferTupleMember(u, 2, 0, u => typeof u === 'string') &&
+        inferTupleMember(u, 2, 1, u => typeof u === 'string')
+    )
+}
+assert<[string, string]>(isInferredBy(isTSS))
+
+export function isTSN(u: unknown) {
+    return (
+        Array.isArray(u) &&
+        inferTupleMember(u, 2, 0, u => typeof u === 'string') &&
+        inferTupleMember(u, 2, 1, u => typeof u === 'number')
+    )
+}
+assert<[string, number]>(isInferredBy(isTSN))
+
 function inferObjectMember<
     K extends PropertyKey,
     T extends {
@@ -53,6 +76,26 @@ function inferObjectMember<
 } {
     return fn(obj[key])
 }
+
+function inferTupleMember<
+    T extends unknown[],
+    N extends number,
+    I extends number,
+    Inferred extends T[I],
+>(xs: T, _: N, ix: I, fn: (value: T[I]) => value is Inferred): xs is T & NthTuple<Inferred, N, I> {
+    return fn(xs[ix])
+}
+
+type NthTuple<
+    T,
+    N extends number,
+    I extends number,
+    Acc extends unknown[] = [],
+> = Acc['length'] extends N
+    ? Acc
+    : Acc['length'] extends I
+      ? NthTuple<T, N, I, [...Acc, T]>
+      : NthTuple<T, N, I, [...Acc, unknown]>
 
 function isEmptyTuple(xs: unknown[]): xs is [] {
     return xs.length === 0

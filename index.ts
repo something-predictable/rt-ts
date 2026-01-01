@@ -85,7 +85,7 @@ function createTypeAssertionExpression(
                 }
             }
             if (ts.isTypeLiteralNode(type)) {
-                return inferMembers(
+                return inferObjectMembers(
                     f,
                     lib,
                     identifier,
@@ -103,7 +103,10 @@ function createTypeAssertionExpression(
                 )
             }
             if (ts.isTupleTypeNode(type)) {
-                return f.createBinaryExpression(
+                return inferTupleMembers(
+                    f,
+                    lib,
+                    identifier,
                     f.createCallExpression(
                         f.createPropertyAccessExpression(
                             f.createIdentifier('Array'),
@@ -112,15 +115,15 @@ function createTypeAssertionExpression(
                         undefined,
                         [identifier],
                     ),
-                    f.createToken(SyntaxKind.AmpersandAmpersandToken),
-                    lib.isEmptyTuple(identifier),
+                    type.elements,
+                    0,
                 )
             }
             throw Object.assign(new Error('Unsupported type.'), { node: type })
     }
 }
 
-function inferMembers(
+function inferObjectMembers(
     f: ts.NodeFactory,
     lib: Library,
     identifier: ts.Identifier,
@@ -133,10 +136,10 @@ function inferMembers(
     }
     const member = members[ix]
     if (!member) {
-        throw new RangeError('Members out of bounds')
+        throw new RangeError('Object members out of bounds')
     }
-    const { name, inferrer } = inferMember(f, lib, member)
-    return inferMembers(
+    const { name, inferrer } = inferObjectMember(f, lib, member)
+    return inferObjectMembers(
         f,
         lib,
         identifier,
@@ -146,7 +149,7 @@ function inferMembers(
             f.createBinaryExpression(
                 f.createBinaryExpression(name, f.createToken(ts.SyntaxKind.InKeyword), identifier),
                 f.createToken(SyntaxKind.AmpersandAmpersandToken),
-                lib.inferMember(identifier, name, inferrer),
+                lib.inferObjectMember(identifier, name, inferrer),
             ),
         ),
         members,
@@ -154,7 +157,7 @@ function inferMembers(
     )
 }
 
-function inferMember(f: ts.NodeFactory, lib: Library, member: ts.TypeElement) {
+function inferObjectMember(f: ts.NodeFactory, lib: Library, member: ts.TypeElement) {
     if (!member.name || !ts.isIdentifier(member.name)) {
         throw new Error('Object member needs a literal name')
     }
@@ -177,6 +180,52 @@ function inferMember(f: ts.NodeFactory, lib: Library, member: ts.TypeElement) {
     } else {
         throw Object.assign(new Error('Unsupported member.'), { node: member })
     }
+}
+
+function inferTupleMembers(
+    f: ts.NodeFactory,
+    lib: Library,
+    identifier: ts.Identifier,
+    inner: ts.Expression,
+    members: readonly (ts.TypeNode | ts.NamedTupleMember)[],
+    ix: number,
+) {
+    if (members.length === 0) {
+        return f.createBinaryExpression(
+            inner,
+            f.createToken(SyntaxKind.AmpersandAmpersandToken),
+            lib.isEmptyTuple(identifier),
+        )
+    }
+    const member = members[ix]
+    if (!member) {
+        throw new RangeError('Tuple members out of bounds')
+    }
+    if (!ts.isTypeNode(member)) {
+        throw new Error('Tuple member needs a type')
+    }
+
+    const chain = f.createBinaryExpression(
+        inner,
+        f.createToken(SyntaxKind.AmpersandAmpersandToken),
+        lib.inferTupleMember(
+            identifier,
+            f.createNumericLiteral(members.length),
+            f.createNumericLiteral(ix),
+            f.createArrowFunction(
+                undefined,
+                undefined,
+                [f.createParameterDeclaration(undefined, undefined, identifier)],
+                undefined,
+                f.createToken(SyntaxKind.EqualsGreaterThanToken),
+                createTypeAssertionExpression(f, lib, identifier, member),
+            ),
+        ),
+    )
+    if (ix === members.length - 1) {
+        return chain
+    }
+    return inferTupleMembers(f, lib, identifier, chain, members, ix + 1)
 }
 
 function isTypeOf(f: ts.NodeFactory, identifier: ts.Identifier, typeLiteral: string) {

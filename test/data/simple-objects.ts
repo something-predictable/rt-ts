@@ -11,3 +11,9 @@ export type OSS = {
 }
 
 export type T = []
+
+export type TS = [string]
+
+export type TSS = [string, string]
+
+export type TSN = [string, number]

@@ -50,7 +50,7 @@ async function print(
             type: ts.TypeNode
             checkFunction: ts.FunctionDeclaration
         }[]
-        library: ts.FunctionDeclaration[]
+        library: ts.DeclarationStatement[]
     },
 ) {
     const resultFile = ts.createSourceFile(
@@ -85,6 +85,7 @@ async function print(
     return await format(code, {
         parser: 'typescript',
         tabWidth: 4,
+        printWidth: 100,
         trailingComma: 'all',
         semi: false,
         singleQuote: true,
