@@ -4,7 +4,7 @@ import { format } from 'prettier'
 import { readFileSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import ts from 'typescript'
+import ts, { SyntaxKind } from 'typescript'
 import { create } from '../index.js'
 
 const cases = await readdir('test/data/')
@@ -29,9 +29,9 @@ describe('emits ts', () => {
                     expected,
                 )
             } catch (e) {
-                const { message, type } = e as { message: string; type?: ts.TypeNode }
-                if (type) {
-                    assert.fail(`${message} Kind: ${ts.SyntaxKind[type.kind]}`)
+                const { message, node } = e as { message: string; node?: { kind: SyntaxKind } }
+                if (node) {
+                    assert.fail(`${message} Kind: ${SyntaxKind[node.kind]}`)
                 }
                 throw e
             }
@@ -71,7 +71,7 @@ async function print(
             printer.printNode(ts.EmitHint.Unspecified, checkChecker(n.name, n.type), resultFile),
             '',
         ]),
-        ...library.map(n => printer.printNode(ts.EmitHint.Unspecified, n, resultFile)),
+        ...library.flatMap(n => [printer.printNode(ts.EmitHint.Unspecified, n, resultFile), '']),
         '',
         checkerLib,
     ].join(ts.sys.newLine)

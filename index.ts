@@ -22,7 +22,7 @@ export function create(sourceFile: ts.SourceFile) {
             name: node.name,
             type: node.type,
             checkFunction: factory.createFunctionDeclaration(
-                [factory.createToken(ts.SyntaxKind.ExportKeyword)],
+                [factory.createToken(SyntaxKind.ExportKeyword)],
                 undefined,
                 factory.createIdentifier('is' + node.name.escapedText),
                 undefined,
@@ -33,7 +33,6 @@ export function create(sourceFile: ts.SourceFile) {
                         arg,
                         undefined,
                         factory.createKeywordTypeNode(SyntaxKind.UnknownKeyword),
-                        undefined,
                     ),
                 ],
                 undefined,
@@ -86,14 +85,21 @@ function createTypeAssertionExpression(
                 }
             }
             if (ts.isTypeLiteralNode(type)) {
-                return f.createBinaryExpression(
-                    isTypeOf(f, identifier, 'object'),
-                    f.createToken(ts.SyntaxKind.AmpersandAmpersandToken),
+                return inferMembers(
+                    f,
+                    lib,
+                    identifier,
                     f.createBinaryExpression(
-                        identifier,
-                        f.createToken(ts.SyntaxKind.ExclamationEqualsEqualsToken),
-                        f.createIdentifier('null'),
+                        isTypeOf(f, identifier, 'object'),
+                        f.createToken(SyntaxKind.AmpersandAmpersandToken),
+                        f.createBinaryExpression(
+                            identifier,
+                            f.createToken(SyntaxKind.ExclamationEqualsEqualsToken),
+                            f.createIdentifier('null'),
+                        ),
                     ),
+                    type.members,
+                    0,
                 )
             }
             if (ts.isTupleTypeNode(type)) {
@@ -106,18 +112,77 @@ function createTypeAssertionExpression(
                         undefined,
                         [identifier],
                     ),
-                    f.createToken(ts.SyntaxKind.AmpersandAmpersandToken),
+                    f.createToken(SyntaxKind.AmpersandAmpersandToken),
                     lib.isEmptyTuple(identifier),
                 )
             }
-            throw Object.assign(new Error('Unsupported type.'), { type })
+            throw Object.assign(new Error('Unsupported type.'), { node: type })
+    }
+}
+
+function inferMembers(
+    f: ts.NodeFactory,
+    lib: Library,
+    identifier: ts.Identifier,
+    inner: ts.BinaryExpression,
+    members: readonly ts.TypeElement[],
+    ix: number,
+) {
+    if (ix === members.length) {
+        return inner
+    }
+    const member = members[ix]
+    if (!member) {
+        throw new RangeError('Members out of bounds')
+    }
+    const { name, inferrer } = inferMember(f, lib, member)
+    return inferMembers(
+        f,
+        lib,
+        identifier,
+        f.createBinaryExpression(
+            inner,
+            f.createToken(SyntaxKind.AmpersandAmpersandToken),
+            f.createBinaryExpression(
+                f.createBinaryExpression(name, f.createToken(ts.SyntaxKind.InKeyword), identifier),
+                f.createToken(SyntaxKind.AmpersandAmpersandToken),
+                lib.inferMember(identifier, name, inferrer),
+            ),
+        ),
+        members,
+        ix + 1,
+    )
+}
+
+function inferMember(f: ts.NodeFactory, lib: Library, member: ts.TypeElement) {
+    if (!member.name || !ts.isIdentifier(member.name)) {
+        throw new Error('Object member needs a literal name')
+    }
+    if (ts.isPropertySignature(member)) {
+        if (!member.type) {
+            throw new Error('Object member needs a type')
+        }
+        const identifier = f.createIdentifier('u')
+        return {
+            name: f.createStringLiteral(member.name.text, true),
+            inferrer: f.createArrowFunction(
+                undefined,
+                undefined,
+                [f.createParameterDeclaration(undefined, undefined, identifier)],
+                undefined,
+                f.createToken(SyntaxKind.EqualsGreaterThanToken),
+                createTypeAssertionExpression(f, lib, identifier, member.type),
+            ),
+        }
+    } else {
+        throw Object.assign(new Error('Unsupported member.'), { node: member })
     }
 }
 
 function isTypeOf(f: ts.NodeFactory, identifier: ts.Identifier, typeLiteral: string) {
     return f.createBinaryExpression(
         f.createTypeOfExpression(identifier),
-        f.createToken(ts.SyntaxKind.EqualsEqualsEqualsToken),
+        f.createToken(SyntaxKind.EqualsEqualsEqualsToken),
         f.createStringLiteral(typeLiteral),
     )
 }
