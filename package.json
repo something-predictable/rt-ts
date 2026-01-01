@@ -23,6 +23,7 @@
     "typescript": "5.9.3"
   },
   "devDependencies": {
-    "@riddance/env": "0.9.7"
+    "@riddance/env": "0.9.7",
+    "prettier": "3.7.4"
   }
 }

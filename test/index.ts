@@ -1,67 +1,37 @@
 import assert from 'node:assert/strict'
+import { format } from 'prettier'
 // eslint-disable-next-line no-restricted-imports
 import { readFileSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { create } from '../index.js'
 
-export type B = boolean
-export type N = number
-export type S = string
-export type BI = bigint
+const cases = await readdir('test/data/')
 
-const expected = `
-export function isB(u: unknown) {
-    return typeof u === "boolean";
-}
-assert<boolean>(isInferredBy(isB))
-
-export function isN(u: unknown) {
-    return typeof u === "number";
-}
-assert<number>(isInferredBy(isN))
-
-export function isS(u: unknown) {
-    return typeof u === "string";
-}
-assert<string>(isInferredBy(isS))
-
-export function isBI(u: unknown) {
-    return typeof u === "bigint";
-}
-assert<bigint>(isInferredBy(isBI))
-
-function assert<T>({ i, o }: { i: (_: T) => void; o: () => T }) {
-    i(o())
-}
-
-function isInferredBy<T>(_: (u: unknown) => u is T) {
-    return {
-        i: (__: T) => {
-            //
-        },
-        o: () => undefined as T,
-    }
-}
-`.trim()
-
-describe('emit ts', () => {
-    it('handles cases.ts', async () => {
-        assert.deepStrictEqual(
-            print(
-                create(
-                    ts.createSourceFile('index.ts', await readFile('test/index.ts', 'utf-8'), {
-                        languageVersion: ts.ScriptTarget.ES2024,
-                    }),
+describe('emits ts', () => {
+    for (const c of cases.filter(f => !f.endsWith('.rt.ts'))) {
+        it(`handles ${c}`, async () => {
+            const inputFile = `test/data/${c}`
+            const outputFile = `${inputFile.slice(0, -3)}.rt.ts`
+            const expected = await readFile(outputFile, 'utf-8')
+            assert.deepStrictEqual(
+                await print(
+                    c,
+                    create(
+                        ts.createSourceFile(c, await readFile(inputFile, 'utf-8'), {
+                            languageVersion: ts.ScriptTarget.ES2024,
+                        }),
+                    ),
                 ),
-            ),
-            expected,
-        )
-    })
+                expected,
+            )
+        })
+    }
 })
 
-function print(
+async function print(
+    fileName: string,
     nodes: {
         name: ts.Identifier
         type: ts.TypeNode
@@ -69,7 +39,7 @@ function print(
     }[],
 ) {
     const resultFile = ts.createSourceFile(
-        'index.rt.ts',
+        fileName,
         '',
         ts.ScriptTarget.Latest,
         /*setParentNodes*/ false,
@@ -90,11 +60,18 @@ function print(
     ].join(ts.sys.newLine)
 
     assert.deepStrictEqual(
-        typecheck(code, 'index.rt.ts').map(d => d.messageText),
+        typecheck(code, fileName).map(d => d.messageText),
         [],
     )
 
-    return code
+    return await format(code, {
+        parser: 'typescript',
+        tabWidth: 4,
+        trailingComma: 'all',
+        semi: false,
+        singleQuote: true,
+        arrowParens: 'avoid',
+    })
 }
 
 function checkChecker(name: ts.Identifier, type: ts.TypeNode) {
