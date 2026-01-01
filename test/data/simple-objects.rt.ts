@@ -3,6 +3,15 @@ export function isO(u: unknown) {
 }
 assert<{}>(isInferredBy(isO))
 
+export function isT(u: unknown) {
+    return Array.isArray(u) && isEmptyTuple(u)
+}
+assert<[]>(isInferredBy(isT))
+
+function isEmptyTuple(xs: unknown[]): xs is [] {
+    return xs.length === 0
+}
+
 function assert<T>({ i, o }: { i: (_: T) => void; o: () => T }) {
     i(o())
 }

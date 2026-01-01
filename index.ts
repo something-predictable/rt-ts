@@ -1,4 +1,5 @@
 import ts, { SyntaxKind } from 'typescript'
+import { Library } from './lib/std.js'
 
 export function create(sourceFile: ts.SourceFile) {
     const nodes: {
@@ -7,6 +8,7 @@ export function create(sourceFile: ts.SourceFile) {
         checkFunction: ts.FunctionDeclaration
     }[] = []
     const { factory } = ts
+    const lib = new Library(factory)
     ts.forEachChild(sourceFile, node => {
         if (!ts.isTypeAliasDeclaration(node)) {
             return
@@ -38,7 +40,7 @@ export function create(sourceFile: ts.SourceFile) {
                 factory.createBlock(
                     [
                         factory.createReturnStatement(
-                            createTypeAssertionExpression(factory, arg, node.type),
+                            createTypeAssertionExpression(factory, lib, arg, node.type),
                         ),
                     ],
                     true,
@@ -46,11 +48,15 @@ export function create(sourceFile: ts.SourceFile) {
             ),
         })
     })
-    return nodes
+    return {
+        nodes,
+        library: [...lib.nodes()],
+    }
 }
 
 function createTypeAssertionExpression(
     f: ts.NodeFactory,
+    lib: Library,
     identifier: ts.Identifier,
     type: ts.TypeNode,
 ) {
@@ -88,6 +94,20 @@ function createTypeAssertionExpression(
                         f.createToken(ts.SyntaxKind.ExclamationEqualsEqualsToken),
                         f.createIdentifier('null'),
                     ),
+                )
+            }
+            if (ts.isTupleTypeNode(type)) {
+                return f.createBinaryExpression(
+                    f.createCallExpression(
+                        f.createPropertyAccessExpression(
+                            f.createIdentifier('Array'),
+                            f.createIdentifier('isArray'),
+                        ),
+                        undefined,
+                        [identifier],
+                    ),
+                    f.createToken(ts.SyntaxKind.AmpersandAmpersandToken),
+                    lib.isEmptyTuple(identifier),
                 )
             }
             throw Object.assign(new Error('Unsupported type.'), { type })

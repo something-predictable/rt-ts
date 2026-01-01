@@ -41,11 +41,17 @@ describe('emits ts', () => {
 
 async function print(
     fileName: string,
-    nodes: {
-        name: ts.Identifier
-        type: ts.TypeNode
-        checkFunction: ts.FunctionDeclaration
-    }[],
+    {
+        nodes,
+        library,
+    }: {
+        nodes: {
+            name: ts.Identifier
+            type: ts.TypeNode
+            checkFunction: ts.FunctionDeclaration
+        }[]
+        library: ts.FunctionDeclaration[]
+    },
 ) {
     const resultFile = ts.createSourceFile(
         fileName,
@@ -65,6 +71,8 @@ async function print(
             printer.printNode(ts.EmitHint.Unspecified, checkChecker(n.name, n.type), resultFile),
             '',
         ]),
+        ...library.map(n => printer.printNode(ts.EmitHint.Unspecified, n, resultFile)),
+        '',
         checkerLib,
     ].join(ts.sys.newLine)
 
