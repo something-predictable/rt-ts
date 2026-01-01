@@ -62,6 +62,7 @@ async function print(
     assert.deepStrictEqual(
         typecheck(code, fileName).map(d => d.messageText),
         [],
+        `Type checking this code: \n${code}`,
     )
 
     return await format(code, {
@@ -109,6 +110,17 @@ function typecheck(code: string, fileName: string) {
         [fileName],
         {
             noEmit: true,
+            strict: true,
+            alwaysStrict: true,
+            allowUnreachableCode: false,
+            allowUnusedLabels: false,
+            noFallthroughCasesInSwitch: true,
+            noImplicitAny: true,
+            noImplicitReturns: true,
+            noImplicitThis: true,
+            noUncheckedIndexedAccess: true,
+            noUnusedLocals: true,
+            noUnusedParameters: true,
         },
         singleFileHost(code, fileName),
     )

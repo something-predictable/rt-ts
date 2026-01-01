@@ -1,3 +1,13 @@
+export function isU(u: unknown) {
+    return u === undefined
+}
+assert<undefined>(isInferredBy(isU))
+
+export function isNL(u: unknown) {
+    return u === null
+}
+assert<null>(isInferredBy(isNL))
+
 export function isB(u: unknown) {
     return typeof u === 'boolean'
 }

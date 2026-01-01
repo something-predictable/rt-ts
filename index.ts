@@ -59,7 +59,7 @@ function createTypeAssertionExpression(
             return f.createBinaryExpression(
                 identifier,
                 f.createToken(SyntaxKind.EqualsEqualsEqualsToken),
-                f.createIdentifier('unknown'),
+                f.createIdentifier('undefined'),
             )
         case SyntaxKind.BooleanKeyword:
             return isTypeOf(f, identifier, 'boolean')
