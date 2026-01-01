@@ -6,9 +6,11 @@ export function create(sourceFile: ts.SourceFile) {
         name: ts.Identifier
         type: ts.TypeNode
         checkFunction: ts.FunctionDeclaration
+        assertFunction: ts.Statement
     }[] = []
     const { factory } = ts
     const lib = new Library(factory)
+    const privateFunctions: ts.FunctionDeclaration[] = []
     ts.forEachChild(sourceFile, node => {
         if (!ts.isTypeAliasDeclaration(node)) {
             return
@@ -18,6 +20,7 @@ export function create(sourceFile: ts.SourceFile) {
             return
         }
         const arg = factory.createIdentifier('u')
+        const isWithErrors = factory.createIdentifier('is' + node.name.escapedText + 'WithErrors')
         nodes.push({
             name: node.name,
             type: node.type,
@@ -39,18 +42,91 @@ export function create(sourceFile: ts.SourceFile) {
                 factory.createBlock(
                     [
                         factory.createReturnStatement(
-                            createTypeAssertionExpression(factory, lib, arg, node.type),
+                            createTypeAssertionExpression(factory, lib, arg, node.type, undefined),
                         ),
                     ],
                     true,
                 ),
             ),
+            assertFunction: factory.createVariableStatement(
+                [factory.createToken(SyntaxKind.ExportKeyword)],
+                factory.createVariableDeclarationList(
+                    [
+                        factory.createVariableDeclaration(
+                            factory.createIdentifier('assertIs' + node.name.escapedText),
+                            undefined,
+                            undefined,
+                            lib.makeAssertIs(isWithErrors),
+                        ),
+                    ],
+                    ts.NodeFlags.Const,
+                ),
+            ),
         })
+        const what = factory.createIdentifier('what')
+        const errors = factory.createIdentifier('errors')
+        privateFunctions.push(
+            factory.createFunctionDeclaration(
+                undefined,
+                undefined,
+                isWithErrors,
+                undefined,
+                [
+                    factory.createParameterDeclaration(
+                        undefined,
+                        undefined,
+                        arg,
+                        undefined,
+                        factory.createKeywordTypeNode(ts.SyntaxKind.UnknownKeyword),
+                    ),
+                    factory.createParameterDeclaration(
+                        undefined,
+                        undefined,
+                        what,
+                        undefined,
+                        factory.createUnionTypeNode([
+                            factory.createKeywordTypeNode(ts.SyntaxKind.StringKeyword),
+                            factory.createKeywordTypeNode(ts.SyntaxKind.UndefinedKeyword),
+                        ]),
+                    ),
+                    factory.createParameterDeclaration(
+                        undefined,
+                        undefined,
+                        errors,
+                        undefined,
+                        factory.createArrayTypeNode(
+                            factory.createKeywordTypeNode(ts.SyntaxKind.StringKeyword),
+                        ),
+                    ),
+                ],
+                undefined,
+                factory.createBlock(
+                    [
+                        factory.createReturnStatement(
+                            createTypeAssertionExpression(factory, lib, arg, node.type, {
+                                factory,
+                                lib,
+                                what,
+                                errors,
+                            }),
+                        ),
+                    ],
+                    true,
+                ),
+            ),
+        )
     })
     return {
         nodes,
-        library: [...lib.nodes()],
+        library: [...privateFunctions, ...lib.nodes()],
     }
+}
+
+type Collector = {
+    factory: ts.NodeFactory
+    lib: Library
+    what: ts.Expression
+    errors: ts.Identifier
 }
 
 function createTypeAssertionExpression(
@@ -58,29 +134,47 @@ function createTypeAssertionExpression(
     lib: Library,
     identifier: ts.Identifier,
     type: ts.TypeNode,
+    collector: Collector | undefined,
 ) {
     switch (type.kind) {
         case SyntaxKind.UndefinedKeyword:
-            return f.createBinaryExpression(
+            return collect(
                 identifier,
-                f.createToken(SyntaxKind.EqualsEqualsEqualsToken),
-                f.createIdentifier('undefined'),
+                i =>
+                    f.createBinaryExpression(
+                        i,
+                        f.createToken(SyntaxKind.EqualsEqualsEqualsToken),
+                        f.createIdentifier('undefined'),
+                    ),
+                'must be undefined',
+                collector,
             )
         case SyntaxKind.BooleanKeyword:
-            return isTypeOf(f, identifier, 'boolean')
+            return collect(
+                identifier,
+                i => isTypeOf(f, i, 'boolean'),
+                'must be a boolean',
+                collector,
+            )
         case SyntaxKind.NumberKeyword:
-            return isTypeOf(f, identifier, 'number')
+            return collect(identifier, i => isTypeOf(f, i, 'number'), 'must be a number', collector)
         case SyntaxKind.BigIntKeyword:
-            return isTypeOf(f, identifier, 'bigint')
+            return collect(identifier, i => isTypeOf(f, i, 'bigint'), 'must be a bigint', collector)
         case SyntaxKind.StringKeyword:
-            return isTypeOf(f, identifier, 'string')
+            return collect(identifier, i => isTypeOf(f, i, 'string'), 'must be a string', collector)
         default:
             if (ts.isLiteralTypeNode(type)) {
                 if (type.literal.kind === SyntaxKind.NullKeyword) {
-                    return f.createBinaryExpression(
+                    return collect(
                         identifier,
-                        f.createToken(SyntaxKind.EqualsEqualsEqualsToken),
-                        f.createIdentifier('null'),
+                        i =>
+                            f.createBinaryExpression(
+                                i,
+                                f.createToken(SyntaxKind.EqualsEqualsEqualsToken),
+                                f.createIdentifier('null'),
+                            ),
+                        'must be null',
+                        collector,
                     )
                 }
             }
@@ -90,16 +184,28 @@ function createTypeAssertionExpression(
                     lib,
                     identifier,
                     f.createBinaryExpression(
-                        isTypeOf(f, identifier, 'object'),
-                        f.createToken(SyntaxKind.AmpersandAmpersandToken),
-                        f.createBinaryExpression(
+                        collect(
                             identifier,
-                            f.createToken(SyntaxKind.ExclamationEqualsEqualsToken),
-                            f.createIdentifier('null'),
+                            i => isTypeOf(f, i, 'object'),
+                            'must be an object',
+                            collector,
+                        ),
+                        f.createToken(SyntaxKind.AmpersandAmpersandToken),
+                        collect(
+                            identifier,
+                            i =>
+                                f.createBinaryExpression(
+                                    i,
+                                    f.createToken(SyntaxKind.ExclamationEqualsEqualsToken),
+                                    f.createIdentifier('null'),
+                                ),
+                            'must not be null',
+                            collector,
                         ),
                     ),
                     type.members,
                     0,
+                    collector,
                 )
             }
             if (ts.isTupleTypeNode(type)) {
@@ -107,20 +213,54 @@ function createTypeAssertionExpression(
                     f,
                     lib,
                     identifier,
-                    f.createCallExpression(
-                        f.createPropertyAccessExpression(
-                            f.createIdentifier('Array'),
-                            f.createIdentifier('isArray'),
-                        ),
-                        undefined,
-                        [identifier],
+                    collect(
+                        identifier,
+                        i =>
+                            f.createCallExpression(
+                                f.createPropertyAccessExpression(
+                                    f.createIdentifier('Array'),
+                                    f.createIdentifier('isArray'),
+                                ),
+                                undefined,
+                                [i],
+                            ),
+                        'must be an array',
+                        collector,
                     ),
                     type.elements,
                     0,
+                    collector,
                 )
             }
             throw Object.assign(new Error('Unsupported type.'), { node: type })
     }
+}
+
+function collect(
+    identifier: ts.Identifier,
+    exp: (i: ts.Identifier) => ts.Expression,
+    error: string | ts.Expression,
+    collector: Collector | undefined,
+) {
+    if (collector === undefined) {
+        return exp(identifier)
+    }
+    const { factory, lib, what, errors } = collector
+    const arg = factory.createIdentifier('v')
+    return lib.collect(
+        identifier,
+        factory.createArrowFunction(
+            undefined,
+            undefined,
+            [factory.createParameterDeclaration(undefined, undefined, arg)],
+            undefined,
+            factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+            exp(arg),
+        ),
+        errors,
+        what,
+        typeof error === 'string' ? factory.createStringLiteral(error) : error,
+    )
 }
 
 function inferObjectMembers(
@@ -130,6 +270,7 @@ function inferObjectMembers(
     inner: ts.BinaryExpression,
     members: readonly ts.TypeElement[],
     ix: number,
+    collector: Collector | undefined,
 ) {
     if (ix === members.length) {
         return inner
@@ -138,7 +279,7 @@ function inferObjectMembers(
     if (!member) {
         throw new RangeError('Object members out of bounds')
     }
-    const { name, inferrer } = inferObjectMember(f, lib, member)
+    const { name, inferrer } = inferObjectMember(f, lib, member, collector)
     return inferObjectMembers(
         f,
         lib,
@@ -147,17 +288,32 @@ function inferObjectMembers(
             inner,
             f.createToken(SyntaxKind.AmpersandAmpersandToken),
             f.createBinaryExpression(
-                f.createBinaryExpression(name, f.createToken(ts.SyntaxKind.InKeyword), identifier),
+                collect(
+                    identifier,
+                    i => f.createBinaryExpression(name, f.createToken(SyntaxKind.InKeyword), i),
+                    f.createBinaryExpression(
+                        f.createStringLiteral('must contain '),
+                        f.createToken(SyntaxKind.PlusToken),
+                        name,
+                    ),
+                    collector,
+                ),
                 f.createToken(SyntaxKind.AmpersandAmpersandToken),
                 lib.inferObjectMember(identifier, name, inferrer),
             ),
         ),
         members,
         ix + 1,
+        collector,
     )
 }
 
-function inferObjectMember(f: ts.NodeFactory, lib: Library, member: ts.TypeElement) {
+function inferObjectMember(
+    f: ts.NodeFactory,
+    lib: Library,
+    member: ts.TypeElement,
+    collector: Collector | undefined,
+) {
     if (!member.name || !ts.isIdentifier(member.name)) {
         throw new Error('Object member needs a literal name')
     }
@@ -166,15 +322,22 @@ function inferObjectMember(f: ts.NodeFactory, lib: Library, member: ts.TypeEleme
             throw new Error('Object member needs a type')
         }
         const identifier = f.createIdentifier('u')
+        const name = f.createStringLiteral(member.name.text, true)
         return {
-            name: f.createStringLiteral(member.name.text, true),
+            name,
             inferrer: f.createArrowFunction(
                 undefined,
                 undefined,
                 [f.createParameterDeclaration(undefined, undefined, identifier)],
                 undefined,
                 f.createToken(SyntaxKind.EqualsGreaterThanToken),
-                createTypeAssertionExpression(f, lib, identifier, member.type),
+                createTypeAssertionExpression(
+                    f,
+                    lib,
+                    identifier,
+                    member.type,
+                    nested(collector, what => lib.memberAccess(what, name)),
+                ),
             ),
         }
     } else {
@@ -189,12 +352,13 @@ function inferTupleMembers(
     inner: ts.Expression,
     members: readonly (ts.TypeNode | ts.NamedTupleMember)[],
     ix: number,
+    collector: Collector | undefined,
 ) {
     if (members.length === 0) {
         return f.createBinaryExpression(
             inner,
             f.createToken(SyntaxKind.AmpersandAmpersandToken),
-            lib.isEmptyTuple(identifier),
+            collect(identifier, i => lib.isEmptyTuple(i), 'must be empty', collector),
         )
     }
     const member = members[ix]
@@ -205,27 +369,47 @@ function inferTupleMembers(
         throw new Error('Tuple member needs a type')
     }
 
+    const ixLiteral = f.createNumericLiteral(ix)
     const chain = f.createBinaryExpression(
         inner,
         f.createToken(SyntaxKind.AmpersandAmpersandToken),
         lib.inferTupleMember(
             identifier,
             f.createNumericLiteral(members.length),
-            f.createNumericLiteral(ix),
+            ixLiteral,
             f.createArrowFunction(
                 undefined,
                 undefined,
                 [f.createParameterDeclaration(undefined, undefined, identifier)],
                 undefined,
                 f.createToken(SyntaxKind.EqualsGreaterThanToken),
-                createTypeAssertionExpression(f, lib, identifier, member),
+                createTypeAssertionExpression(
+                    f,
+                    lib,
+                    identifier,
+                    member,
+                    nested(collector, what => lib.indexOf(what, ixLiteral)),
+                ),
             ),
         ),
     )
     if (ix === members.length - 1) {
         return chain
     }
-    return inferTupleMembers(f, lib, identifier, chain, members, ix + 1)
+    return inferTupleMembers(f, lib, identifier, chain, members, ix + 1, collector)
+}
+
+function nested(
+    collector: Collector | undefined,
+    what: (w: ts.Expression) => ts.Expression,
+): Collector | undefined {
+    if (collector === undefined) {
+        return undefined
+    }
+    return {
+        ...collector,
+        what: what(collector.what),
+    }
 }
 
 function isTypeOf(f: ts.NodeFactory, identifier: ts.Identifier, typeLiteral: string) {

@@ -2,15 +2,18 @@ import assert from 'node:assert/strict'
 import { format } from 'prettier'
 // eslint-disable-next-line no-restricted-imports
 import { readFileSync } from 'node:fs'
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import ts, { SyntaxKind } from 'typescript'
 import { create } from '../index.js'
+import { assertIsOSS, assertIsT, assertIsTSS } from './data/simple-objects.rt.js'
 
-const cases = await readdir('test/data/')
+const fileCases = await readdir('test/data/')
 
 describe('emits ts', () => {
-    for (const c of cases.filter(f => !f.endsWith('.rt.ts'))) {
+    for (const c of fileCases.filter(
+        f => !f.endsWith('.js') && !f.endsWith('.d.ts') && !f.endsWith('.rt.ts'),
+    )) {
         it(`handles ${c}`, async () => {
             const inputFile = `test/data/${c}`
             const outputFile = `${inputFile.slice(0, -3)}.rt.ts`
@@ -19,7 +22,7 @@ describe('emits ts', () => {
             try {
                 assert.deepStrictEqual(
                     await print(
-                        c,
+                        `${c.slice(0, -3)}.rt.ts`,
                         create(
                             ts.createSourceFile(c, await readFile(inputFile, 'utf-8'), {
                                 languageVersion: ts.ScriptTarget.ES2024,
@@ -39,6 +42,44 @@ describe('emits ts', () => {
     }
 })
 
+describe('errors', () => {
+    it('reports correct issues', () => {
+        const cases: [(u: unknown, what: string) => void, unknown, string[]][] = [
+            [assertIsOSS, 3, ['testCase must be an object']],
+            [assertIsOSS, {}, ['testCase must contain a']],
+            [assertIsOSS, { a: 3 }, ['testCase.a must be a string']],
+            [assertIsOSS, { a: '3' }, ['testCase must contain b']],
+            [assertIsOSS, { a: '3', b: 3 }, ['testCase.b must be a string']],
+            [assertIsOSS, { a: '3', b: '3' }, []],
+            [assertIsT, 3, ['testCase must be an array']],
+            [assertIsT, [], []],
+            [assertIsTSS, 3, ['testCase must be an array']],
+            [assertIsTSS, '3', ['testCase must be an array']],
+            [assertIsTSS, {}, ['testCase must be an array']],
+            [assertIsTSS, [3], ['testCase[0] must be a string']],
+            [assertIsTSS, ['3'], ['testCase[1] must be a string']],
+            [assertIsTSS, ['3', 3], ['testCase[1] must be a string']],
+            [assertIsTSS, ['3', '3 '], []],
+        ]
+        for (const [fn, arg, expectedIssues] of cases) {
+            try {
+                fn(arg, 'testCase')
+                assert.deepStrictEqual([], expectedIssues)
+            } catch (e) {
+                const { issues: actualIssues } = e as { issues: unknown }
+                if (!Array.isArray(actualIssues)) {
+                    throw e
+                }
+                assert.deepStrictEqual(
+                    actualIssues,
+                    expectedIssues,
+                    `${fn.name}(${JSON.stringify(arg)})`,
+                )
+            }
+        }
+    })
+})
+
 async function print(
     fileName: string,
     {
@@ -48,7 +89,8 @@ async function print(
         nodes: {
             name: ts.Identifier
             type: ts.TypeNode
-            checkFunction: ts.FunctionDeclaration
+            checkFunction: ts.Statement
+            assertFunction: ts.Statement
         }[]
         library: ts.DeclarationStatement[]
     },
@@ -66,9 +108,14 @@ async function print(
     })
 
     const code = [
+        '/* eslint-disable no-shadow */',
+        '',
         ...nodes.flatMap(n => [
             printer.printNode(ts.EmitHint.Unspecified, n.checkFunction, resultFile),
             printer.printNode(ts.EmitHint.Unspecified, checkChecker(n.name, n.type), resultFile),
+            '',
+            printer.printNode(ts.EmitHint.Unspecified, n.assertFunction, resultFile),
+            printer.printNode(ts.EmitHint.Unspecified, assertChecker(n.name, n.type), resultFile),
             '',
         ]),
         ...library.flatMap(n => [printer.printNode(ts.EmitHint.Unspecified, n, resultFile), '']),
@@ -77,7 +124,7 @@ async function print(
     ].join(ts.sys.newLine)
 
     assert.deepStrictEqual(
-        typecheck(code, fileName).map(d => d.messageText),
+        (await typecheck(code, fileName)).map(d => d.messageText),
         [],
         `Type checking this code: \n${code}`,
     )
@@ -108,6 +155,21 @@ function checkChecker(name: ts.Identifier, type: ts.TypeNode) {
     )
 }
 
+function assertChecker(name: ts.Identifier, type: ts.TypeNode) {
+    const { factory } = ts
+    return factory.createExpressionStatement(
+        factory.createCallExpression(
+            factory.createIdentifier('assert'),
+            [type],
+            [
+                factory.createCallExpression(factory.createIdentifier('isAssertedBy'), undefined, [
+                    factory.createIdentifier('assertIs' + name.escapedText),
+                ]),
+            ],
+        ),
+    )
+}
+
 const checkerLib = `
 function assert<T>({ i, o }: { i: (_: T) => void; o: () => T }) {
     i(o())
@@ -121,13 +183,27 @@ function isInferredBy<T>(_: (u: unknown) => u is T) {
         o: () => undefined as T,
     }
 }
+
+function isAssertedBy<T>(
+    _: (u: unknown, what: string | undefined, error: (issues: string[]) => Error) => asserts u is T,
+) {
+    return {
+        i: (__: T) => {
+            //
+        },
+        o: () => undefined as T,
+    }
+}
 `.trim()
 
-function typecheck(code: string, fileName: string) {
+async function typecheck(code: string, fileName: string) {
+    const output: { [file: string]: string } = {}
     const program = ts.createProgram(
         [fileName],
         {
-            noEmit: true,
+            module: ts.ModuleKind.ES2022,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            declaration: true,
             strict: true,
             alwaysStrict: true,
             allowUnreachableCode: false,
@@ -140,13 +216,22 @@ function typecheck(code: string, fileName: string) {
             noUnusedLocals: true,
             noUnusedParameters: true,
         },
-        singleFileHost(code, fileName),
+        singleFileHost(code, fileName, output),
     )
+
+    program.emit()
+    for (const [f, c] of Object.entries(output)) {
+        await writeFile(`test/data/${f}`, c, 'utf-8')
+    }
 
     return ts.getPreEmitDiagnostics(program)
 }
 
-function singleFileHost(code: string, fileName: string): ts.CompilerHost {
+function singleFileHost(
+    code: string,
+    fileName: string,
+    output: { [file: string]: string },
+): ts.CompilerHost {
     return {
         getSourceFile: (
             f: string,
@@ -171,8 +256,10 @@ function singleFileHost(code: string, fileName: string): ts.CompilerHost {
             }
             return undefined
         },
-        getDefaultLibFileName: () => 'lib.d.ts',
-        writeFile: notImplemented('writeFile'),
+        getDefaultLibFileName: () => 'lib.es2015.d.ts',
+        writeFile: (f, text) => {
+            output[f] = text
+        },
         getCurrentDirectory: () => '.',
         getDirectories: notImplemented('getDirectories'),
         useCaseSensitiveFileNames: () => true,
