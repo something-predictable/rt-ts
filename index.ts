@@ -79,6 +79,17 @@ function createTypeAssertionExpression(
                     )
                 }
             }
+            if (ts.isTypeLiteralNode(type)) {
+                return f.createBinaryExpression(
+                    isTypeOf(f, identifier, 'object'),
+                    f.createToken(ts.SyntaxKind.AmpersandAmpersandToken),
+                    f.createBinaryExpression(
+                        identifier,
+                        f.createToken(ts.SyntaxKind.ExclamationEqualsEqualsToken),
+                        f.createIdentifier('null'),
+                    ),
+                )
+            }
             throw Object.assign(new Error('Unsupported type.'), { type })
     }
 }

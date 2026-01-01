@@ -15,17 +15,26 @@ describe('emits ts', () => {
             const inputFile = `test/data/${c}`
             const outputFile = `${inputFile.slice(0, -3)}.rt.ts`
             const expected = await readFile(outputFile, 'utf-8')
-            assert.deepStrictEqual(
-                await print(
-                    c,
-                    create(
-                        ts.createSourceFile(c, await readFile(inputFile, 'utf-8'), {
-                            languageVersion: ts.ScriptTarget.ES2024,
-                        }),
+
+            try {
+                assert.deepStrictEqual(
+                    await print(
+                        c,
+                        create(
+                            ts.createSourceFile(c, await readFile(inputFile, 'utf-8'), {
+                                languageVersion: ts.ScriptTarget.ES2024,
+                            }),
+                        ),
                     ),
-                ),
-                expected,
-            )
+                    expected,
+                )
+            } catch (e) {
+                const { message, type } = e as { message: string; type?: ts.TypeNode }
+                if (type) {
+                    assert.fail(`${message} Kind: ${ts.SyntaxKind[type.kind]}`)
+                }
+                throw e
+            }
         })
     }
 })
