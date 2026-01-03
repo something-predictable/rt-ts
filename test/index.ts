@@ -6,6 +6,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import ts, { SyntaxKind } from 'typescript'
 import { create } from '../index.js'
+import { assertIsUNS, assertIsUON, assertIsUOO } from './data/sets.rt.js'
 import { assertIsOSS, assertIsT, assertIsTSS } from './data/simple-objects.rt.js'
 
 const fileCases = await readdir('test/data/')
@@ -60,6 +61,14 @@ describe('errors', () => {
             [assertIsTSS, ['3'], ['testCase[1] must be a string']],
             [assertIsTSS, ['3', 3], ['testCase[1] must be a string']],
             [assertIsTSS, ['3', '3 '], []],
+            [assertIsUNS, true, ['testCase must be a number', 'testCase must be a string']],
+            [assertIsUNS, '3', []],
+            [assertIsUON, {}, ['testCase must contain a', 'testCase must be a number']],
+            [assertIsUON, { a: '3' }, ['testCase must contain b', 'testCase must be a number']],
+            [assertIsUON, { a: '3', b: 2 }, []],
+            [assertIsUOO, { a: '3' }, ['testCase must contain b', 'testCase must contain c']],
+            [assertIsUOO, { a: '3', b: 1 }, []],
+            [assertIsUOO, { a: '3', c: 1 }, []],
         ]
         for (const [fn, arg, expectedIssues] of cases) {
             try {

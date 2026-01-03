@@ -135,7 +135,7 @@ function createTypeAssertionExpression(
     identifier: ts.Identifier,
     type: ts.TypeNode,
     collector: Collector | undefined,
-) {
+): ts.Expression {
     switch (type.kind) {
         case SyntaxKind.UndefinedKeyword:
             return collect(
@@ -231,6 +231,9 @@ function createTypeAssertionExpression(
                     0,
                     collector,
                 )
+            }
+            if (ts.isUnionTypeNode(type)) {
+                return inferUnionMembers(f, lib, identifier, type.types, 0, collector)
             }
             throw Object.assign(new Error('Unsupported type.'), { node: type })
     }
@@ -397,6 +400,32 @@ function inferTupleMembers(
         return chain
     }
     return inferTupleMembers(f, lib, identifier, chain, members, ix + 1, collector)
+}
+
+function inferUnionMembers(
+    f: ts.NodeFactory,
+    lib: Library,
+    identifier: ts.Identifier,
+    members: readonly ts.TypeNode[],
+    ix: number,
+    collector: Collector | undefined,
+): ts.Expression {
+    if (members.length === 0) {
+        throw new Error('Union member list cannot be empty')
+    }
+    const member = members[ix]
+    if (!member) {
+        throw new RangeError('Union member out of bounds')
+    }
+    const branch = createTypeAssertionExpression(f, lib, identifier, member, collector)
+    if (ix === members.length - 1) {
+        return branch
+    }
+    return f.createBinaryExpression(
+        branch,
+        f.createToken(SyntaxKind.BarBarToken),
+        inferUnionMembers(f, lib, identifier, members, ix + 1, collector),
+    )
 }
 
 function nested(
