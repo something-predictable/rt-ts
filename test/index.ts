@@ -6,7 +6,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import ts, { SyntaxKind } from 'typescript'
 import { create } from '../index.js'
-import { assertIsUNS, assertIsUON, assertIsUOO } from './data/sets.rt.js'
+import { assertIsUL, assertIsUNS, assertIsUON, assertIsUOO } from './data/sets.rt.js'
 import { assertIsOSS, assertIsT, assertIsTSS } from './data/simple-objects.rt.js'
 
 const fileCases = await readdir('test/data/')
@@ -73,6 +73,12 @@ describe('errors', () => {
             [assertIsUOO, { a: '3' }, ['testCase must contain b, or testCase must contain c']],
             [assertIsUOO, { a: '3', b: 1 }, []],
             [assertIsUOO, { a: '3', c: 1 }, []],
+            [
+                assertIsUL,
+                2,
+                ["testCase must be true, or testCase must be 3, or testCase must be '3'"],
+            ],
+            [assertIsUL, '3', []],
         ]
         for (const [fn, arg, expectedIssues] of cases) {
             try {
@@ -216,6 +222,7 @@ async function typecheck(code: string, fileName: string) {
         {
             module: ts.ModuleKind.ES2022,
             moduleResolution: ts.ModuleResolutionKind.Bundler,
+            target: ts.ScriptTarget.ES2020,
             declaration: true,
             strict: true,
             alwaysStrict: true,

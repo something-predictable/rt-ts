@@ -160,19 +160,18 @@ function createTypeAssertionExpression(
             return collect(identifier, i => isTypeOf(f, i, 'string'), 'must be a string', collector)
         default:
             if (ts.isLiteralTypeNode(type)) {
-                if (type.literal.kind === SyntaxKind.NullKeyword) {
-                    return collect(
-                        identifier,
-                        i =>
-                            f.createBinaryExpression(
-                                i,
-                                f.createToken(SyntaxKind.EqualsEqualsEqualsToken),
-                                f.createIdentifier('null'),
-                            ),
-                        'must be null',
-                        collector,
-                    )
-                }
+                const [text, value] = getLiteralValue(f, type.literal)
+                return collect(
+                    identifier,
+                    i =>
+                        f.createBinaryExpression(
+                            i,
+                            f.createToken(SyntaxKind.EqualsEqualsEqualsToken),
+                            value,
+                        ),
+                    `must be ${text}`,
+                    collector,
+                )
             }
             if (ts.isTypeLiteralNode(type)) {
                 return inferObjectMembers(
@@ -236,6 +235,34 @@ function createTypeAssertionExpression(
             }
             throw Object.assign(new Error('Unsupported type.'), { node: type })
     }
+}
+
+function getLiteralValue(
+    f: ts.NodeFactory,
+    literalType:
+        | ts.NullLiteral
+        | ts.BooleanLiteral
+        | ts.LiteralExpression
+        | ts.PrefixUnaryExpression,
+) {
+    switch (literalType.kind) {
+        case SyntaxKind.NullKeyword:
+            return ['null', f.createIdentifier('null')] as const
+        case SyntaxKind.TrueKeyword:
+            return ['true', f.createIdentifier('true')] as const
+        case SyntaxKind.FalseKeyword:
+            return ['false', f.createIdentifier('false')] as const
+    }
+    if (ts.isNumericLiteral(literalType)) {
+        return [literalType.text, f.createNumericLiteral(literalType.text)] as const
+    }
+    if (ts.isBigIntLiteral(literalType)) {
+        return [literalType.text, f.createBigIntLiteral(literalType.text)] as const
+    }
+    if (ts.isStringLiteral(literalType)) {
+        return [`'${literalType.text}'`, f.createStringLiteral(literalType.text)] as const
+    }
+    throw Object.assign(new Error('Unsupported type literal.'), { node: literalType })
 }
 
 function createTypeAssertionFunction(

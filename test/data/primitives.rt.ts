@@ -48,6 +48,38 @@ assert<bigint>(isInferredBy(isBI))
 export const assertIsBI = makeAssertIs(isBIWithErrors)
 assert<bigint>(isAssertedBy(assertIsBI))
 
+export function isLB(u: unknown) {
+    return u === true
+}
+assert<true>(isInferredBy(isLB))
+
+export const assertIsLB = makeAssertIs(isLBWithErrors)
+assert<true>(isAssertedBy(assertIsLB))
+
+export function isLN(u: unknown) {
+    return u === 3
+}
+assert<3>(isInferredBy(isLN))
+
+export const assertIsLN = makeAssertIs(isLNWithErrors)
+assert<3>(isAssertedBy(assertIsLN))
+
+export function isLBI(u: unknown) {
+    return u === 3n
+}
+assert<3n>(isInferredBy(isLBI))
+
+export const assertIsLBI = makeAssertIs(isLBIWithErrors)
+assert<3n>(isAssertedBy(assertIsLBI))
+
+export function isLS(u: unknown) {
+    return u === '3'
+}
+assert<'3'>(isInferredBy(isLS))
+
+export const assertIsLS = makeAssertIs(isLSWithErrors)
+assert<'3'>(isAssertedBy(assertIsLS))
+
 function isUWithErrors(u: unknown, what: string | undefined, errors: string[]) {
     return collect(u, v => v === undefined, errors, what, 'must be undefined')
 }
@@ -70,6 +102,22 @@ function isSWithErrors(u: unknown, what: string | undefined, errors: string[]) {
 
 function isBIWithErrors(u: unknown, what: string | undefined, errors: string[]) {
     return collect(u, v => typeof v === 'bigint', errors, what, 'must be a bigint')
+}
+
+function isLBWithErrors(u: unknown, what: string | undefined, errors: string[]) {
+    return collect(u, v => v === true, errors, what, 'must be true')
+}
+
+function isLNWithErrors(u: unknown, what: string | undefined, errors: string[]) {
+    return collect(u, v => v === 3, errors, what, 'must be 3')
+}
+
+function isLBIWithErrors(u: unknown, what: string | undefined, errors: string[]) {
+    return collect(u, v => v === 3n, errors, what, 'must be 3n')
+}
+
+function isLSWithErrors(u: unknown, what: string | undefined, errors: string[]) {
+    return collect(u, v => v === '3', errors, what, "must be '3'")
 }
 
 function makeAssertIs<T>(

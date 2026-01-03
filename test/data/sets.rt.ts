@@ -8,6 +8,14 @@ assert<number | string>(isInferredBy(isUNS))
 export const assertIsUNS = makeAssertIs(isUNSWithErrors)
 assert<number | string>(isAssertedBy(assertIsUNS))
 
+export function isUL(u: unknown) {
+    return u === true || u === 3 || u === '3'
+}
+assert<true | 3 | '3'>(isInferredBy(isUL))
+
+export const assertIsUL = makeAssertIs(isULWithErrors)
+assert<true | 3 | '3'>(isAssertedBy(assertIsUL))
+
 export function isUON(u: unknown) {
     return (
         (typeof u === 'object' &&
@@ -80,6 +88,23 @@ function isUNSWithErrors(u: unknown, what: string | undefined, errors: string[])
     const i =
         collect(u, v => typeof v === 'number', es[0], what, 'must be a number') ||
         collect(u, v => typeof v === 'string', es[1], what, 'must be a string')
+    if (!i) {
+        errors.push(
+            es
+                .filter(branch => branch.length !== 0)
+                .map(branch => branch.join(' and '))
+                .join(', or '),
+        )
+    }
+    return i
+}
+
+function isULWithErrors(u: unknown, what: string | undefined, errors: string[]) {
+    const es: [string[], string[], string[]] = [[], [], []]
+    const i =
+        collect(u, v => v === true, es[0], what, 'must be true') ||
+        collect(u, v => v === 3, es[1], what, 'must be 3') ||
+        collect(u, v => v === '3', es[2], what, "must be '3'")
     if (!i) {
         errors.push(
             es
