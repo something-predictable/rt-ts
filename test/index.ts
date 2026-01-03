@@ -33,9 +33,13 @@ describe('emits ts', () => {
                     expected,
                 )
             } catch (e) {
-                const { message, node } = e as { message: string; node?: { kind: SyntaxKind } }
+                const { message, node, stack } = e as {
+                    message: string
+                    stack: unknown
+                    node?: { kind: SyntaxKind }
+                }
                 if (node) {
-                    assert.fail(`${message} Kind: ${SyntaxKind[node.kind]}`)
+                    assert.fail(`${message} Kind: ${SyntaxKind[node.kind]}\n${stack}`)
                 }
                 throw e
             }
@@ -61,12 +65,12 @@ describe('errors', () => {
             [assertIsTSS, ['3'], ['testCase[1] must be a string']],
             [assertIsTSS, ['3', 3], ['testCase[1] must be a string']],
             [assertIsTSS, ['3', '3 '], []],
-            [assertIsUNS, true, ['testCase must be a number', 'testCase must be a string']],
+            [assertIsUNS, true, ['testCase must be a number, or testCase must be a string']],
             [assertIsUNS, '3', []],
-            [assertIsUON, {}, ['testCase must contain a', 'testCase must be a number']],
-            [assertIsUON, { a: '3' }, ['testCase must contain b', 'testCase must be a number']],
+            [assertIsUON, {}, ['testCase must contain a, or testCase must be a number']],
+            [assertIsUON, { a: '3' }, ['testCase must contain b, or testCase must be a number']],
             [assertIsUON, { a: '3', b: 2 }, []],
-            [assertIsUOO, { a: '3' }, ['testCase must contain b', 'testCase must contain c']],
+            [assertIsUOO, { a: '3' }, ['testCase must contain b, or testCase must contain c']],
             [assertIsUOO, { a: '3', b: 1 }, []],
             [assertIsUOO, { a: '3', c: 1 }, []],
         ]

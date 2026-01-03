@@ -1,8 +1,8 @@
 import {
     NodeFlags,
     SyntaxKind,
-    type ArrowFunction,
     type Expression,
+    type FunctionLikeDeclarationBase,
     type Identifier,
     type NodeFactory,
     type NumericLiteral,
@@ -37,7 +37,11 @@ export class Library {
         this.#indexOf = factory.createIdentifier('indexOf')
     }
 
-    inferObjectMember(obj: Identifier, member: StringLiteral, inferrer: ArrowFunction) {
+    inferObjectMember(
+        obj: Identifier,
+        member: StringLiteral,
+        inferrer: Expression & FunctionLikeDeclarationBase,
+    ) {
         this.#inferObjectMemberUsed = true
         return this.#factory.createCallExpression(this.#inferObjectMember, undefined, [
             obj,
@@ -50,7 +54,7 @@ export class Library {
         xs: Identifier,
         length: NumericLiteral,
         index: NumericLiteral,
-        inferrer: ArrowFunction,
+        inferrer: Expression & FunctionLikeDeclarationBase,
     ) {
         this.#inferTupleMemberUsed = true
         return this.#factory.createCallExpression(this.#inferTupleMember, undefined, [
@@ -73,8 +77,8 @@ export class Library {
 
     collect(
         u: Identifier,
-        inferrer: ArrowFunction,
-        errors: Identifier,
+        inferrer: Expression & FunctionLikeDeclarationBase,
+        errors: Expression,
         what: Expression,
         error: Expression,
     ) {
@@ -120,6 +124,61 @@ export class Library {
         if (this.#indexOfUsed) {
             yield createIndexOf(this.#factory, this.#indexOf)
         }
+    }
+
+    createUnionErrorMessage(branchErrors: Expression, errors: Identifier) {
+        const f = this.#factory
+        const filterParam = f.createIdentifier('branch')
+        const filtered = f.createCallExpression(
+            f.createPropertyAccessExpression(errors, f.createIdentifier('filter')),
+            undefined,
+            [
+                f.createArrowFunction(
+                    undefined,
+                    undefined,
+                    [f.createParameterDeclaration(undefined, undefined, filterParam)],
+                    undefined,
+                    f.createToken(SyntaxKind.EqualsGreaterThanToken),
+                    f.createBinaryExpression(
+                        f.createPropertyAccessExpression(filterParam, f.createIdentifier('length')),
+                        f.createToken(SyntaxKind.ExclamationEqualsEqualsToken),
+                        f.createNumericLiteral(0),
+                    ),
+                ),
+            ],
+        )
+        const mapParam = f.createIdentifier('branch')
+        const mapped = f.createCallExpression(
+            f.createPropertyAccessExpression(filtered, f.createIdentifier('map')),
+            undefined,
+            [
+                f.createArrowFunction(
+                    undefined,
+                    undefined,
+                    [f.createParameterDeclaration(undefined, undefined, mapParam)],
+                    undefined,
+                    f.createToken(SyntaxKind.EqualsGreaterThanToken),
+                    f.createCallExpression(
+                        f.createPropertyAccessExpression(mapParam, f.createIdentifier('join')),
+                        undefined,
+                        [f.createStringLiteral(' and ')],
+                    ),
+                ),
+            ],
+        )
+        return f.createExpressionStatement(
+            f.createCallExpression(
+                f.createPropertyAccessExpression(branchErrors, f.createIdentifier('push')),
+                undefined,
+                [
+                    f.createCallExpression(
+                        f.createPropertyAccessExpression(mapped, f.createIdentifier('join')),
+                        undefined,
+                        [f.createStringLiteral(', or ')],
+                    ),
+                ],
+            ),
+        )
     }
 }
 

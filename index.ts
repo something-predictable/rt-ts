@@ -21,6 +21,7 @@ export function create(sourceFile: ts.SourceFile) {
         }
         const arg = factory.createIdentifier('u')
         const isWithErrors = factory.createIdentifier('is' + node.name.escapedText + 'WithErrors')
+        const inferred = createTypeAssertionExpression(factory, lib, arg, node.type, undefined)
         nodes.push({
             name: node.name,
             type: node.type,
@@ -40,11 +41,7 @@ export function create(sourceFile: ts.SourceFile) {
                 ],
                 undefined,
                 factory.createBlock(
-                    [
-                        factory.createReturnStatement(
-                            createTypeAssertionExpression(factory, lib, arg, node.type, undefined),
-                        ),
-                    ],
+                    Array.isArray(inferred) ? inferred : [factory.createReturnStatement(inferred)],
                     true,
                 ),
             ),
@@ -65,6 +62,12 @@ export function create(sourceFile: ts.SourceFile) {
         })
         const what = factory.createIdentifier('what')
         const errors = factory.createIdentifier('errors')
+        const collectedInference = createTypeAssertionExpression(factory, lib, arg, node.type, {
+            factory,
+            lib,
+            what,
+            errors,
+        })
         privateFunctions.push(
             factory.createFunctionDeclaration(
                 undefined,
@@ -101,16 +104,9 @@ export function create(sourceFile: ts.SourceFile) {
                 ],
                 undefined,
                 factory.createBlock(
-                    [
-                        factory.createReturnStatement(
-                            createTypeAssertionExpression(factory, lib, arg, node.type, {
-                                factory,
-                                lib,
-                                what,
-                                errors,
-                            }),
-                        ),
-                    ],
+                    Array.isArray(collectedInference)
+                        ? collectedInference
+                        : [factory.createReturnStatement(collectedInference)],
                     true,
                 ),
             ),
@@ -126,7 +122,7 @@ type Collector = {
     factory: ts.NodeFactory
     lib: Library
     what: ts.Expression
-    errors: ts.Identifier
+    errors: ts.Expression
 }
 
 function createTypeAssertionExpression(
@@ -135,7 +131,7 @@ function createTypeAssertionExpression(
     identifier: ts.Identifier,
     type: ts.TypeNode,
     collector: Collector | undefined,
-): ts.Expression {
+): ts.Expression | ts.Statement[] {
     switch (type.kind) {
         case SyntaxKind.UndefinedKeyword:
             return collect(
@@ -233,10 +229,39 @@ function createTypeAssertionExpression(
                 )
             }
             if (ts.isUnionTypeNode(type)) {
-                return inferUnionMembers(f, lib, identifier, type.types, 0, collector)
+                if (collector === undefined) {
+                    return inferUnionMembers(f, lib, identifier, type.types, 0, undefined)
+                }
+                return inferUnionMembersWithCollector(f, lib, identifier, type.types, collector)
             }
             throw Object.assign(new Error('Unsupported type.'), { node: type })
     }
+}
+
+function createTypeAssertionFunction(
+    f: ts.NodeFactory,
+    identifier: ts.Identifier,
+    typeAssertion: ts.Expression | ts.Statement[],
+): ts.Expression & ts.FunctionLikeDeclarationBase {
+    if (Array.isArray(typeAssertion)) {
+        return f.createFunctionExpression(
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            [f.createParameterDeclaration(undefined, undefined, identifier)],
+            undefined,
+            f.createBlock(typeAssertion),
+        )
+    }
+    return f.createArrowFunction(
+        undefined,
+        undefined,
+        [f.createParameterDeclaration(undefined, undefined, identifier)],
+        undefined,
+        f.createToken(SyntaxKind.EqualsGreaterThanToken),
+        typeAssertion,
+    )
 }
 
 function collect(
@@ -328,12 +353,9 @@ function inferObjectMember(
         const name = f.createStringLiteral(member.name.text, true)
         return {
             name,
-            inferrer: f.createArrowFunction(
-                undefined,
-                undefined,
-                [f.createParameterDeclaration(undefined, undefined, identifier)],
-                undefined,
-                f.createToken(SyntaxKind.EqualsGreaterThanToken),
+            inferrer: createTypeAssertionFunction(
+                f,
+                identifier,
                 createTypeAssertionExpression(
                     f,
                     lib,
@@ -380,12 +402,9 @@ function inferTupleMembers(
             identifier,
             f.createNumericLiteral(members.length),
             ixLiteral,
-            f.createArrowFunction(
-                undefined,
-                undefined,
-                [f.createParameterDeclaration(undefined, undefined, identifier)],
-                undefined,
-                f.createToken(SyntaxKind.EqualsGreaterThanToken),
+            createTypeAssertionFunction(
+                f,
+                identifier,
                 createTypeAssertionExpression(
                     f,
                     lib,
@@ -402,13 +421,68 @@ function inferTupleMembers(
     return inferTupleMembers(f, lib, identifier, chain, members, ix + 1, collector)
 }
 
+function inferUnionMembersWithCollector(
+    f: ts.NodeFactory,
+    lib: Library,
+    identifier: ts.Identifier,
+    members: readonly ts.TypeNode[],
+    collector: Collector,
+): ts.Statement[] {
+    const es = f.createIdentifier('es')
+    const stringArrayType = f.createArrayTypeNode(f.createKeywordTypeNode(SyntaxKind.StringKeyword))
+    const errorArraysType = f.createTupleTypeNode(members.map(() => stringArrayType))
+    const branchCollectors = members.map((_, ix) => ({
+        ...collector,
+        errors: f.createElementAccessExpression(es, f.createNumericLiteral(ix)),
+    }))
+    const result = f.createIdentifier('i')
+    return [
+        f.createVariableStatement(
+            undefined,
+            f.createVariableDeclarationList(
+                [
+                    f.createVariableDeclaration(
+                        es,
+                        undefined,
+                        errorArraysType,
+                        f.createArrayLiteralExpression(
+                            members.map(() => f.createArrayLiteralExpression([], false)),
+                            false,
+                        ),
+                    ),
+                ],
+                ts.NodeFlags.Const,
+            ),
+        ),
+        f.createVariableStatement(
+            undefined,
+            f.createVariableDeclarationList(
+                [
+                    f.createVariableDeclaration(
+                        result,
+                        undefined,
+                        undefined,
+                        inferUnionMembers(f, lib, identifier, members, 0, branchCollectors),
+                    ),
+                ],
+                ts.NodeFlags.Const,
+            ),
+        ),
+        f.createIfStatement(
+            f.createPrefixUnaryExpression(SyntaxKind.ExclamationToken, result),
+            f.createBlock([lib.createUnionErrorMessage(collector.errors, es)], true),
+        ),
+        f.createReturnStatement(result),
+    ]
+}
+
 function inferUnionMembers(
     f: ts.NodeFactory,
     lib: Library,
     identifier: ts.Identifier,
     members: readonly ts.TypeNode[],
     ix: number,
-    collector: Collector | undefined,
+    collector: Collector[] | undefined,
 ): ts.Expression {
     if (members.length === 0) {
         throw new Error('Union member list cannot be empty')
@@ -417,7 +491,16 @@ function inferUnionMembers(
     if (!member) {
         throw new RangeError('Union member out of bounds')
     }
-    const branch = createTypeAssertionExpression(f, lib, identifier, member, collector)
+    const branch = createTypeAssertionExpression(
+        f,
+        lib,
+        identifier,
+        member,
+        Array.isArray(collector) ? collector[ix] : collector,
+    )
+    if (Array.isArray(branch)) {
+        throw new TypeError('Union of unions not supported.')
+    }
     if (ix === members.length - 1) {
         return branch
     }

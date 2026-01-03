@@ -76,87 +76,114 @@ assert<
 >(isAssertedBy(assertIsUOO))
 
 function isUNSWithErrors(u: unknown, what: string | undefined, errors: string[]) {
-    return (
-        collect(u, v => typeof v === 'number', errors, what, 'must be a number') ||
-        collect(u, v => typeof v === 'string', errors, what, 'must be a string')
-    )
+    const es: [string[], string[]] = [[], []]
+    const i =
+        collect(u, v => typeof v === 'number', es[0], what, 'must be a number') ||
+        collect(u, v => typeof v === 'string', es[1], what, 'must be a string')
+    if (!i) {
+        errors.push(
+            es
+                .filter(branch => branch.length !== 0)
+                .map(branch => branch.join(' and '))
+                .join(', or '),
+        )
+    }
+    return i
 }
 
 function isUONWithErrors(u: unknown, what: string | undefined, errors: string[]) {
-    return (
-        (collect(u, v => typeof v === 'object', errors, what, 'must be an object') &&
-            collect(u, v => v !== null, errors, what, 'must not be null') &&
-            collect(u, v => 'a' in v, errors, what, 'must contain ' + 'a') &&
+    const es: [string[], string[]] = [[], []]
+    const i =
+        (collect(u, v => typeof v === 'object', es[0], what, 'must be an object') &&
+            collect(u, v => v !== null, es[0], what, 'must not be null') &&
+            collect(u, v => 'a' in v, es[0], what, 'must contain ' + 'a') &&
             inferObjectMember(u, 'a', u =>
                 collect(
                     u,
                     v => typeof v === 'string',
-                    errors,
+                    es[0],
                     memberAccess(what, 'a'),
                     'must be a string',
                 ),
             ) &&
-            collect(u, v => 'b' in v, errors, what, 'must contain ' + 'b') &&
+            collect(u, v => 'b' in v, es[0], what, 'must contain ' + 'b') &&
             inferObjectMember(u, 'b', u =>
                 collect(
                     u,
                     v => typeof v === 'number',
-                    errors,
+                    es[0],
                     memberAccess(what, 'b'),
                     'must be a number',
                 ),
             )) ||
-        collect(u, v => typeof v === 'number', errors, what, 'must be a number')
-    )
+        collect(u, v => typeof v === 'number', es[1], what, 'must be a number')
+    if (!i) {
+        errors.push(
+            es
+                .filter(branch => branch.length !== 0)
+                .map(branch => branch.join(' and '))
+                .join(', or '),
+        )
+    }
+    return i
 }
 
 function isUOOWithErrors(u: unknown, what: string | undefined, errors: string[]) {
-    return (
-        (collect(u, v => typeof v === 'object', errors, what, 'must be an object') &&
-            collect(u, v => v !== null, errors, what, 'must not be null') &&
-            collect(u, v => 'a' in v, errors, what, 'must contain ' + 'a') &&
+    const es: [string[], string[]] = [[], []]
+    const i =
+        (collect(u, v => typeof v === 'object', es[0], what, 'must be an object') &&
+            collect(u, v => v !== null, es[0], what, 'must not be null') &&
+            collect(u, v => 'a' in v, es[0], what, 'must contain ' + 'a') &&
             inferObjectMember(u, 'a', u =>
                 collect(
                     u,
                     v => typeof v === 'string',
-                    errors,
+                    es[0],
                     memberAccess(what, 'a'),
                     'must be a string',
                 ),
             ) &&
-            collect(u, v => 'b' in v, errors, what, 'must contain ' + 'b') &&
+            collect(u, v => 'b' in v, es[0], what, 'must contain ' + 'b') &&
             inferObjectMember(u, 'b', u =>
                 collect(
                     u,
                     v => typeof v === 'number',
-                    errors,
+                    es[0],
                     memberAccess(what, 'b'),
                     'must be a number',
                 ),
             )) ||
-        (collect(u, v => typeof v === 'object', errors, what, 'must be an object') &&
-            collect(u, v => v !== null, errors, what, 'must not be null') &&
-            collect(u, v => 'a' in v, errors, what, 'must contain ' + 'a') &&
+        (collect(u, v => typeof v === 'object', es[1], what, 'must be an object') &&
+            collect(u, v => v !== null, es[1], what, 'must not be null') &&
+            collect(u, v => 'a' in v, es[1], what, 'must contain ' + 'a') &&
             inferObjectMember(u, 'a', u =>
                 collect(
                     u,
                     v => typeof v === 'string',
-                    errors,
+                    es[1],
                     memberAccess(what, 'a'),
                     'must be a string',
                 ),
             ) &&
-            collect(u, v => 'c' in v, errors, what, 'must contain ' + 'c') &&
+            collect(u, v => 'c' in v, es[1], what, 'must contain ' + 'c') &&
             inferObjectMember(u, 'c', u =>
                 collect(
                     u,
                     v => typeof v === 'number',
-                    errors,
+                    es[1],
                     memberAccess(what, 'c'),
                     'must be a number',
                 ),
             ))
-    )
+    if (!i) {
+        errors.push(
+            es
+                .filter(branch => branch.length !== 0)
+                .map(branch => branch.join(' and '))
+                .join(', or '),
+        )
+    }
+    return i
 }
 
 function inferObjectMember<
