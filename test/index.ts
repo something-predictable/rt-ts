@@ -6,6 +6,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import ts, { SyntaxKind } from 'typescript'
 import { create } from '../index.js'
+import { assertIsS } from './data/nested-objects.rt.js'
 import { assertIsUL, assertIsUNS, assertIsUON, assertIsUOO } from './data/sets.rt.js'
 import { assertIsOSS, assertIsT, assertIsTSS } from './data/simple-objects.rt.js'
 
@@ -79,6 +80,19 @@ describe('errors', () => {
                 ["testCase must be true, or testCase must be 3, or testCase must be '3'"],
             ],
             [assertIsUL, '3', []],
+            [assertIsS, {}, ['testCase must contain type']],
+            [
+                assertIsS,
+                { type: 3 },
+                ["testCase.type must be 'up', or testCase.type must be 'down'"],
+            ],
+            [assertIsS, { type: 'up' }, ['testCase must contain n']],
+            [assertIsS, { type: 'up', n: 3 }, ['testCase.n must be a string']],
+            [assertIsS, { type: 'up', n: '3' }, ['testCase must contain a']],
+            [assertIsS, { type: 'up', n: '3', a: 3 }, ['testCase.a must be an object']],
+            [assertIsS, { type: 'up', n: '3', a: {} }, ['testCase.a must contain x']],
+            [assertIsS, { type: 'up', n: '3', a: { x: '3' } }, ['testCase.a.x must be a number']],
+            [assertIsS, { type: 'up', n: '3', a: { x: 3, y: 3 } }, []],
         ]
         for (const [fn, arg, expectedIssues] of cases) {
             try {

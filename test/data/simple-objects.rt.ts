@@ -212,7 +212,12 @@ function inferTupleMember<
     N extends number,
     I extends number,
     Inferred extends T[I],
->(xs: T, _: N, ix: I, fn: (value: T[I]) => value is Inferred): xs is T & NthTuple<Inferred, N, I> {
+>(
+    xs: T,
+    _: N,
+    ix: I,
+    fn: (value: unknown) => value is Inferred,
+): xs is T & NthTuple<Inferred, N, I> {
     return fn(xs[ix])
 }
 

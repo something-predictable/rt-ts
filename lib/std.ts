@@ -336,7 +336,7 @@ function createInferTupleMember(factory: NodeFactory, identifier: Identifier) {
     //     N extends number,
     //     I extends number,
     //     Inferred extends T[I],
-    // >(xs: T, _: N, ix: I, fn: (value: T[I]) => value is Inferred): xs is T & NthTuple<Inferred, N, I> {
+    // >(xs: T, _: N, ix: I, fn: (value: unknown) => value is Inferred): xs is T & NthTuple<Inferred, N, I> {
     //     return fn(xs[ix])
     // }
 
@@ -428,10 +428,7 @@ function createInferTupleMember(factory: NodeFactory, identifier: Identifier) {
                                 undefined,
                                 factory.createIdentifier('value'),
                                 undefined,
-                                factory.createIndexedAccessTypeNode(
-                                    factory.createTypeReferenceNode(t, undefined),
-                                    factory.createTypeReferenceNode(i, undefined),
-                                ),
+                                factory.createKeywordTypeNode(SyntaxKind.UnknownKeyword),
                                 undefined,
                             ),
                         ],
