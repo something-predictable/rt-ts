@@ -19,6 +19,15 @@ export function isS(u: unknown) {
                 inferObjectMember(u, 'x', u => typeof u === 'number') &&
                 'y' in u &&
                 inferObjectMember(u, 'y', u => typeof u === 'number'),
+        ) &&
+        'b' in u &&
+        inferObjectMember(
+            u,
+            'b',
+            u =>
+                typeof u === 'object' &&
+                u !== null &&
+                inferObjectMembers(u, (_, u) => u === 1 || u === 3),
         )
     )
 }
@@ -29,6 +38,9 @@ assert<{
         x: number
         y: number
     }
+    b: {
+        [k: string]: 1 | 3
+    }
 }>(isInferredBy(isS))
 
 export const assertIsS = makeAssertIs(isSWithErrors)
@@ -38,6 +50,9 @@ assert<{
     a: {
         x: number
         y: number
+    }
+    b: {
+        [k: string]: 1 | 3
     }
 }>(isAssertedBy(assertIsS))
 
@@ -155,6 +170,47 @@ function isSWithErrors(u: unknown, what: string | undefined, errors: string[]) {
                         'must be a number',
                     ),
                 ),
+        ) &&
+        collect(u, v => 'b' in v, errors, what, 'must contain ' + 'b') &&
+        inferObjectMember(
+            u,
+            'b',
+            u =>
+                collect(
+                    u,
+                    v => typeof v === 'object',
+                    errors,
+                    memberAccess(what, 'b'),
+                    'must be an object',
+                ) &&
+                collect(u, v => v !== null, errors, memberAccess(what, 'b'), 'must not be null') &&
+                inferObjectMembers(u, function (w, u) {
+                    const es: [string[], string[]] = [[], []]
+                    const i =
+                        collect(
+                            u,
+                            v => v === 1,
+                            es[0],
+                            memberAccess(memberAccess(what, 'b'), w),
+                            'must be 1',
+                        ) ||
+                        collect(
+                            u,
+                            v => v === 3,
+                            es[1],
+                            memberAccess(memberAccess(what, 'b'), w),
+                            'must be 3',
+                        )
+                    if (!i) {
+                        errors.push(
+                            es
+                                .filter(branch => branch.length !== 0)
+                                .map(branch => branch.join(' and '))
+                                .join(', or '),
+                        )
+                    }
+                    return i
+                }),
         )
     )
 }
@@ -242,6 +298,15 @@ function inferObjectMember<
     [P in K]: Inferred
 } {
     return fn(obj[key])
+}
+
+function inferObjectMembers<T extends object, Inferred>(
+    obj: T,
+    fn: (key: string, value: unknown) => value is Inferred,
+): obj is T & {
+    [P in string]: Inferred
+} {
+    return Object.entries(obj).every(kv => fn(...kv))
 }
 
 function inferTupleMember<

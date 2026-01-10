@@ -10,6 +10,10 @@ export type OSS = {
     b: string
 }
 
+export type OM = {
+    [key: string]: boolean
+}
+
 export type T = []
 
 export type TS = [string]

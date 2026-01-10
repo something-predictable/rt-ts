@@ -8,7 +8,7 @@ import ts, { SyntaxKind } from 'typescript'
 import { create } from '../index.js'
 import { assertIsS } from './data/nested-objects.rt.js'
 import { assertIsUL, assertIsUNS, assertIsUON, assertIsUOO } from './data/sets.rt.js'
-import { assertIsOSS, assertIsT, assertIsTSS } from './data/simple-objects.rt.js'
+import { assertIsOM, assertIsOSS, assertIsT, assertIsTSS } from './data/simple-objects.rt.js'
 
 const fileCases = await readdir('test/data/')
 
@@ -57,6 +57,9 @@ describe('errors', () => {
             [assertIsOSS, { a: '3' }, ['testCase must contain b']],
             [assertIsOSS, { a: '3', b: 3 }, ['testCase.b must be a string']],
             [assertIsOSS, { a: '3', b: '3' }, []],
+            [assertIsOM, { a: true, b: false }, []],
+            [assertIsOM, { a: true, b: false, c: '3' }, ['testCase.c must be a boolean']],
+            [assertIsOM, { a: '3', b: false, c: true }, ['testCase.a must be a boolean']],
             [assertIsT, 3, ['testCase must be an array']],
             [assertIsT, [], []],
             [assertIsTSS, 3, ['testCase must be an array']],
@@ -92,7 +95,24 @@ describe('errors', () => {
             [assertIsS, { type: 'up', n: '3', a: 3 }, ['testCase.a must be an object']],
             [assertIsS, { type: 'up', n: '3', a: {} }, ['testCase.a must contain x']],
             [assertIsS, { type: 'up', n: '3', a: { x: '3' } }, ['testCase.a.x must be a number']],
-            [assertIsS, { type: 'up', n: '3', a: { x: 3, y: 3 } }, []],
+            [assertIsS, { type: 'up', n: '3', a: { x: 3, y: 3 } }, ['testCase must contain b']],
+            [
+                assertIsS,
+                { type: 'up', n: '3', a: { x: 3, y: 3 }, b: '3' },
+                ['testCase.b must be an object'],
+            ],
+            [assertIsS, { type: 'up', n: '3', a: { x: 3, y: 3 }, b: {} }, []],
+            [
+                assertIsS,
+                { type: 'up', n: '3', a: { x: 3, y: 3 }, b: { a: '3' } },
+                ['testCase.b.a must be 1, or testCase.b.a must be 3'],
+            ],
+            [
+                assertIsS,
+                { type: 'up', n: '3', a: { x: 3, y: 3 }, b: { b: 1, c: 3, d: '3' } },
+                ['testCase.b.d must be 1, or testCase.b.d must be 3'],
+            ],
+            [assertIsS, { type: 'up', n: '3', a: { x: 3, y: 3 }, b: { b: 1, c: 3, d: 3 } }, []],
         ]
         for (const [fn, arg, expectedIssues] of cases) {
             try {
@@ -290,7 +310,7 @@ function singleFileHost(
             }
             return undefined
         },
-        getDefaultLibFileName: () => 'lib.es2015.d.ts',
+        getDefaultLibFileName: () => 'lib.es2017.d.ts',
         writeFile: (f, text) => {
             output[f] = text
         },

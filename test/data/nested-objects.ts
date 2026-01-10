@@ -5,6 +5,9 @@ export type S = {
         x: number
         y: number
     }
+    b: {
+        [k: string]: 1 | 3
+    }
 }
 
 export type TOS = [

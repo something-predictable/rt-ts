@@ -269,14 +269,22 @@ function createTypeAssertionFunction(
     f: ts.NodeFactory,
     identifier: ts.Identifier,
     typeAssertion: ts.Expression | ts.Statement[],
+    what?: ts.Identifier,
 ): ts.Expression & ts.FunctionLikeDeclarationBase {
+    const params = what
+        ? [
+              f.createParameterDeclaration(undefined, undefined, what),
+              f.createParameterDeclaration(undefined, undefined, identifier),
+          ]
+        : [f.createParameterDeclaration(undefined, undefined, identifier)]
+
     if (Array.isArray(typeAssertion)) {
         return f.createFunctionExpression(
             undefined,
             undefined,
             undefined,
             undefined,
-            [f.createParameterDeclaration(undefined, undefined, identifier)],
+            params,
             undefined,
             f.createBlock(typeAssertion),
         )
@@ -284,7 +292,7 @@ function createTypeAssertionFunction(
     return f.createArrowFunction(
         undefined,
         undefined,
-        [f.createParameterDeclaration(undefined, undefined, identifier)],
+        params,
         undefined,
         f.createToken(SyntaxKind.EqualsGreaterThanToken),
         typeAssertion,
@@ -333,6 +341,28 @@ function inferObjectMembers(
     const member = members[ix]
     if (!member) {
         throw new RangeError('Object members out of bounds')
+    }
+    if (ts.isIndexSignatureDeclaration(member)) {
+        const what = f.createIdentifier(collector ? 'w' : '_')
+        return f.createBinaryExpression(
+            inner,
+            f.createToken(SyntaxKind.AmpersandAmpersandToken),
+            lib.inferObjectMembers(
+                identifier,
+                createTypeAssertionFunction(
+                    f,
+                    identifier,
+                    createTypeAssertionExpression(
+                        f,
+                        lib,
+                        identifier,
+                        member.type,
+                        nested(collector, w => lib.memberAccess(w, what)),
+                    ),
+                    what,
+                ),
+            ),
+        )
     }
     const { name, inferrer } = inferObjectMember(f, lib, member, collector)
     return inferObjectMembers(

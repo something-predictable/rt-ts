@@ -50,6 +50,22 @@ assert<{
     b: string
 }>(isAssertedBy(assertIsOSS))
 
+export function isOM(u: unknown) {
+    return (
+        typeof u === 'object' &&
+        u !== null &&
+        inferObjectMembers(u, (_, u) => typeof u === 'boolean')
+    )
+}
+assert<{
+    [key: string]: boolean
+}>(isInferredBy(isOM))
+
+export const assertIsOM = makeAssertIs(isOMWithErrors)
+assert<{
+    [key: string]: boolean
+}>(isAssertedBy(assertIsOM))
+
 export function isT(u: unknown) {
     return Array.isArray(u) && isEmptyTuple(u)
 }
@@ -151,6 +167,22 @@ function isOSSWithErrors(u: unknown, what: string | undefined, errors: string[])
     )
 }
 
+function isOMWithErrors(u: unknown, what: string | undefined, errors: string[]) {
+    return (
+        collect(u, v => typeof v === 'object', errors, what, 'must be an object') &&
+        collect(u, v => v !== null, errors, what, 'must not be null') &&
+        inferObjectMembers(u, (w, u) =>
+            collect(
+                u,
+                v => typeof v === 'boolean',
+                errors,
+                memberAccess(what, w),
+                'must be a boolean',
+            ),
+        )
+    )
+}
+
 function isTWithErrors(u: unknown, what: string | undefined, errors: string[]) {
     return (
         collect(u, v => Array.isArray(v), errors, what, 'must be an array') &&
@@ -205,6 +237,15 @@ function inferObjectMember<
     [P in K]: Inferred
 } {
     return fn(obj[key])
+}
+
+function inferObjectMembers<T extends object, Inferred>(
+    obj: T,
+    fn: (key: string, value: unknown) => value is Inferred,
+): obj is T & {
+    [P in string]: Inferred
+} {
+    return Object.entries(obj).every(kv => fn(...kv))
 }
 
 function inferTupleMember<

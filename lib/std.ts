@@ -13,6 +13,8 @@ export class Library {
     readonly #factory
     readonly #inferObjectMember
     #inferObjectMemberUsed = false
+    readonly #inferObjectMembers
+    #inferObjectMembersUsed = false
     readonly #inferTupleMember
     #inferTupleMemberUsed = false
     readonly #isEmptyTuple
@@ -29,6 +31,7 @@ export class Library {
     constructor(factory: NodeFactory) {
         this.#factory = factory
         this.#inferObjectMember = factory.createIdentifier('inferObjectMember')
+        this.#inferObjectMembers = factory.createIdentifier('inferObjectMembers')
         this.#inferTupleMember = factory.createIdentifier('inferTupleMember')
         this.#isEmptyTuple = factory.createIdentifier('isEmptyTuple')
         this.#makeAssertIs = factory.createIdentifier('makeAssertIs')
@@ -46,6 +49,14 @@ export class Library {
         return this.#factory.createCallExpression(this.#inferObjectMember, undefined, [
             obj,
             member,
+            inferrer,
+        ])
+    }
+
+    inferObjectMembers(obj: Identifier, inferrer: Expression & FunctionLikeDeclarationBase) {
+        this.#inferObjectMembersUsed = true
+        return this.#factory.createCallExpression(this.#inferObjectMembers, undefined, [
+            obj,
             inferrer,
         ])
     }
@@ -92,7 +103,7 @@ export class Library {
         ])
     }
 
-    memberAccess(what: Expression, member: StringLiteral) {
+    memberAccess(what: Expression, member: Expression) {
         this.#dotUsed = true
         return this.#factory.createCallExpression(this.#dot, undefined, [what, member])
     }
@@ -105,6 +116,9 @@ export class Library {
     *nodes() {
         if (this.#inferObjectMemberUsed) {
             yield createInferMember(this.#factory, this.#inferObjectMember)
+        }
+        if (this.#inferObjectMembersUsed) {
+            yield createInferMembers(this.#factory, this.#inferObjectMembers)
         }
         if (this.#inferTupleMemberUsed) {
             yield* createInferTupleMember(this.#factory, this.#inferTupleMember)
@@ -323,6 +337,151 @@ function createInferMember(factory: NodeFactory, identifier: Identifier) {
                             factory.createIdentifier('key'),
                         ),
                     ]),
+                ),
+            ],
+            true,
+        ),
+    )
+}
+
+function createInferMembers(factory: NodeFactory, identifier: Identifier) {
+    // function inferObjectMembers<T extends object, Inferred>(
+    //     obj: T,
+    //     fn: (key: string, value: unknown) => value is Inferred,
+    // ): obj is T & {
+    //     [P in string]: Inferred
+    // } {
+    //     return Object.entries(obj).every(kv => fn(...kv))
+    // }
+
+    const t = factory.createIdentifier('T')
+    return factory.createFunctionDeclaration(
+        undefined,
+        undefined,
+        identifier,
+        [
+            factory.createTypeParameterDeclaration(
+                undefined,
+                t,
+                factory.createKeywordTypeNode(SyntaxKind.ObjectKeyword),
+                undefined,
+            ),
+            factory.createTypeParameterDeclaration(
+                undefined,
+                factory.createIdentifier('Inferred'),
+                undefined,
+                undefined,
+            ),
+        ],
+        [
+            factory.createParameterDeclaration(
+                undefined,
+                undefined,
+                factory.createIdentifier('obj'),
+                undefined,
+                factory.createTypeReferenceNode(t, undefined),
+                undefined,
+            ),
+            factory.createParameterDeclaration(
+                undefined,
+                undefined,
+                factory.createIdentifier('fn'),
+                undefined,
+                factory.createFunctionTypeNode(
+                    undefined,
+                    [
+                        factory.createParameterDeclaration(
+                            undefined,
+                            undefined,
+                            factory.createIdentifier('key'),
+                            undefined,
+                            factory.createKeywordTypeNode(SyntaxKind.StringKeyword),
+                            undefined,
+                        ),
+                        factory.createParameterDeclaration(
+                            undefined,
+                            undefined,
+                            factory.createIdentifier('value'),
+                            undefined,
+                            factory.createKeywordTypeNode(SyntaxKind.UnknownKeyword),
+                            undefined,
+                        ),
+                    ],
+                    factory.createTypePredicateNode(
+                        undefined,
+                        factory.createIdentifier('value'),
+                        factory.createTypeReferenceNode(
+                            factory.createIdentifier('Inferred'),
+                            undefined,
+                        ),
+                    ),
+                ),
+                undefined,
+            ),
+        ],
+        factory.createTypePredicateNode(
+            undefined,
+            factory.createIdentifier('obj'),
+            factory.createIntersectionTypeNode([
+                factory.createTypeReferenceNode(t, undefined),
+                factory.createMappedTypeNode(
+                    undefined,
+                    factory.createTypeParameterDeclaration(
+                        undefined,
+                        factory.createIdentifier('P'),
+                        factory.createKeywordTypeNode(SyntaxKind.StringKeyword),
+                        undefined,
+                    ),
+                    undefined,
+                    undefined,
+                    factory.createTypeReferenceNode(
+                        factory.createIdentifier('Inferred'),
+                        undefined,
+                    ),
+                    undefined,
+                ),
+            ]),
+        ),
+        factory.createBlock(
+            [
+                factory.createReturnStatement(
+                    factory.createCallExpression(
+                        factory.createPropertyAccessExpression(
+                            factory.createCallExpression(
+                                factory.createPropertyAccessExpression(
+                                    factory.createIdentifier('Object'),
+                                    factory.createIdentifier('entries'),
+                                ),
+                                undefined,
+                                [factory.createIdentifier('obj')],
+                            ),
+                            factory.createIdentifier('every'),
+                        ),
+                        undefined,
+                        [
+                            factory.createArrowFunction(
+                                undefined,
+                                undefined,
+                                [
+                                    factory.createParameterDeclaration(
+                                        undefined,
+                                        undefined,
+                                        factory.createIdentifier('kv'),
+                                        undefined,
+                                        undefined,
+                                        undefined,
+                                    ),
+                                ],
+                                undefined,
+                                factory.createToken(SyntaxKind.EqualsGreaterThanToken),
+                                factory.createCallExpression(
+                                    factory.createIdentifier('fn'),
+                                    undefined,
+                                    [factory.createSpreadElement(factory.createIdentifier('kv'))],
+                                ),
+                            ),
+                        ],
+                    ),
                 ),
             ],
             true,
