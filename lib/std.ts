@@ -15,6 +15,8 @@ export class Library {
     #inferObjectMemberUsed = false
     readonly #inferObjectMembers
     #inferObjectMembersUsed = false
+    readonly #inferArrayMembers
+    #inferArrayMembersUsed = false
     readonly #inferTupleMember
     #inferTupleMemberUsed = false
     readonly #isEmptyTuple
@@ -32,6 +34,7 @@ export class Library {
         this.#factory = factory
         this.#inferObjectMember = factory.createIdentifier('inferObjectMember')
         this.#inferObjectMembers = factory.createIdentifier('inferObjectMembers')
+        this.#inferArrayMembers = factory.createIdentifier('inferArrayMembers')
         this.#inferTupleMember = factory.createIdentifier('inferTupleMember')
         this.#isEmptyTuple = factory.createIdentifier('isEmptyTuple')
         this.#makeAssertIs = factory.createIdentifier('makeAssertIs')
@@ -57,6 +60,14 @@ export class Library {
         this.#inferObjectMembersUsed = true
         return this.#factory.createCallExpression(this.#inferObjectMembers, undefined, [
             obj,
+            inferrer,
+        ])
+    }
+
+    inferArrayMembers(array: Identifier, inferrer: Expression & FunctionLikeDeclarationBase) {
+        this.#inferArrayMembersUsed = true
+        return this.#factory.createCallExpression(this.#inferArrayMembers, undefined, [
+            array,
             inferrer,
         ])
     }
@@ -108,7 +119,7 @@ export class Library {
         return this.#factory.createCallExpression(this.#dot, undefined, [what, member])
     }
 
-    indexOf(what: Expression, ix: NumericLiteral) {
+    indexOf(what: Expression, ix: Expression) {
         this.#indexOfUsed = true
         return this.#factory.createCallExpression(this.#indexOf, undefined, [what, ix])
     }
@@ -119,6 +130,9 @@ export class Library {
         }
         if (this.#inferObjectMembersUsed) {
             yield createInferMembers(this.#factory, this.#inferObjectMembers)
+        }
+        if (this.#inferArrayMembersUsed) {
+            yield createInferArray(this.#factory, this.#inferArrayMembers)
         }
         if (this.#inferTupleMemberUsed) {
             yield* createInferTupleMember(this.#factory, this.#inferTupleMember)
@@ -481,6 +495,110 @@ function createInferMembers(factory: NodeFactory, identifier: Identifier) {
                                 ),
                             ),
                         ],
+                    ),
+                ),
+            ],
+            true,
+        ),
+    )
+}
+function createInferArray(factory: NodeFactory, identifier: Identifier) {
+    // function inferArrayMembers<T extends unknown[], Inferred>(
+    //     array: T,
+    //     fn: (value: unknown, ix: number) => value is Inferred,
+    // ): array is T & Inferred[] {
+    //     return array.every(fn)
+    // }
+    const t = factory.createIdentifier('T')
+    return factory.createFunctionDeclaration(
+        undefined,
+        undefined,
+        identifier,
+        [
+            factory.createTypeParameterDeclaration(
+                undefined,
+                t,
+                factory.createArrayTypeNode(
+                    factory.createKeywordTypeNode(SyntaxKind.UnknownKeyword),
+                ),
+                undefined,
+            ),
+            factory.createTypeParameterDeclaration(
+                undefined,
+                factory.createIdentifier('Inferred'),
+                undefined,
+                undefined,
+            ),
+        ],
+        [
+            factory.createParameterDeclaration(
+                undefined,
+                undefined,
+                factory.createIdentifier('array'),
+                undefined,
+                factory.createTypeReferenceNode(t, undefined),
+                undefined,
+            ),
+            factory.createParameterDeclaration(
+                undefined,
+                undefined,
+                factory.createIdentifier('fn'),
+                undefined,
+                factory.createFunctionTypeNode(
+                    undefined,
+                    [
+                        factory.createParameterDeclaration(
+                            undefined,
+                            undefined,
+                            factory.createIdentifier('value'),
+                            undefined,
+                            factory.createKeywordTypeNode(SyntaxKind.UnknownKeyword),
+                            undefined,
+                        ),
+                        factory.createParameterDeclaration(
+                            undefined,
+                            undefined,
+                            factory.createIdentifier('ix'),
+                            undefined,
+                            factory.createKeywordTypeNode(SyntaxKind.NumberKeyword),
+                            undefined,
+                        ),
+                    ],
+                    factory.createTypePredicateNode(
+                        undefined,
+                        factory.createIdentifier('value'),
+                        factory.createTypeReferenceNode(
+                            factory.createIdentifier('Inferred'),
+                            undefined,
+                        ),
+                    ),
+                ),
+                undefined,
+            ),
+        ],
+        factory.createTypePredicateNode(
+            undefined,
+            factory.createIdentifier('array'),
+            factory.createIntersectionTypeNode([
+                factory.createTypeReferenceNode(t, undefined),
+                factory.createArrayTypeNode(
+                    factory.createTypeReferenceNode(
+                        factory.createIdentifier('Inferred'),
+                        undefined,
+                    ),
+                ),
+            ]),
+        ),
+        factory.createBlock(
+            [
+                factory.createReturnStatement(
+                    factory.createCallExpression(
+                        factory.createPropertyAccessExpression(
+                            factory.createIdentifier('array'),
+                            factory.createIdentifier('every'),
+                        ),
+                        undefined,
+                        [factory.createIdentifier('fn')],
                     ),
                 ),
             ],

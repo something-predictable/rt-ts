@@ -21,3 +21,9 @@ export type TS = [string]
 export type TSS = [string, string]
 
 export type TSN = [string, number]
+
+export type AS = string[]
+
+export type AN = number[]
+
+export type AO = {}[]

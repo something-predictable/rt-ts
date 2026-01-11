@@ -203,6 +203,44 @@ function createTypeAssertionExpression(
                     collector,
                 )
             }
+            if (ts.isArrayTypeNode(type)) {
+                const ix = f.createIdentifier(collector ? 'ix' : '_')
+                return f.createBinaryExpression(
+                    collect(
+                        identifier,
+                        i =>
+                            f.createCallExpression(
+                                f.createPropertyAccessExpression(
+                                    f.createIdentifier('Array'),
+                                    f.createIdentifier('isArray'),
+                                ),
+                                undefined,
+                                [i],
+                            ),
+                        'must be an array',
+                        collector,
+                    ),
+                    f.createToken(SyntaxKind.AmpersandAmpersandToken),
+                    lib.inferArrayMembers(
+                        identifier,
+                        createTypeAssertionFunction(
+                            f,
+                            identifier,
+                            createTypeAssertionExpression(
+                                f,
+                                lib,
+                                identifier,
+                                type.elementType,
+                                nested(collector, w => lib.indexOf(w, ix)),
+                            ),
+                            collector && [
+                                f.createParameterDeclaration(undefined, undefined, identifier),
+                                f.createParameterDeclaration(undefined, undefined, ix),
+                            ],
+                        ),
+                    ),
+                )
+            }
             if (ts.isTupleTypeNode(type)) {
                 return inferTupleMembers(
                     f,
@@ -269,22 +307,16 @@ function createTypeAssertionFunction(
     f: ts.NodeFactory,
     identifier: ts.Identifier,
     typeAssertion: ts.Expression | ts.Statement[],
-    what?: ts.Identifier,
+    parameters?: ts.ParameterDeclaration[],
 ): ts.Expression & ts.FunctionLikeDeclarationBase {
-    const params = what
-        ? [
-              f.createParameterDeclaration(undefined, undefined, what),
-              f.createParameterDeclaration(undefined, undefined, identifier),
-          ]
-        : [f.createParameterDeclaration(undefined, undefined, identifier)]
-
+    parameters ??= [f.createParameterDeclaration(undefined, undefined, identifier)]
     if (Array.isArray(typeAssertion)) {
         return f.createFunctionExpression(
             undefined,
             undefined,
             undefined,
             undefined,
-            params,
+            parameters,
             undefined,
             f.createBlock(typeAssertion),
         )
@@ -292,7 +324,7 @@ function createTypeAssertionFunction(
     return f.createArrowFunction(
         undefined,
         undefined,
-        params,
+        parameters,
         undefined,
         f.createToken(SyntaxKind.EqualsGreaterThanToken),
         typeAssertion,
@@ -359,7 +391,10 @@ function inferObjectMembers(
                         member.type,
                         nested(collector, w => lib.memberAccess(w, what)),
                     ),
-                    what,
+                    [
+                        f.createParameterDeclaration(undefined, undefined, what),
+                        f.createParameterDeclaration(undefined, undefined, identifier),
+                    ],
                 ),
             ),
         )

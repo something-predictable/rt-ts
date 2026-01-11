@@ -106,6 +106,30 @@ assert<[string, number]>(isInferredBy(isTSN))
 export const assertIsTSN = makeAssertIs(isTSNWithErrors)
 assert<[string, number]>(isAssertedBy(assertIsTSN))
 
+export function isAS(u: unknown) {
+    return Array.isArray(u) && inferArrayMembers(u, u => typeof u === 'string')
+}
+assert<string[]>(isInferredBy(isAS))
+
+export const assertIsAS = makeAssertIs(isASWithErrors)
+assert<string[]>(isAssertedBy(assertIsAS))
+
+export function isAN(u: unknown) {
+    return Array.isArray(u) && inferArrayMembers(u, u => typeof u === 'number')
+}
+assert<number[]>(isInferredBy(isAN))
+
+export const assertIsAN = makeAssertIs(isANWithErrors)
+assert<number[]>(isAssertedBy(assertIsAN))
+
+export function isAO(u: unknown) {
+    return Array.isArray(u) && inferArrayMembers(u, u => typeof u === 'object' && u !== null)
+}
+assert<{}[]>(isInferredBy(isAO))
+
+export const assertIsAO = makeAssertIs(isAOWithErrors)
+assert<{}[]>(isAssertedBy(assertIsAO))
+
 function isOWithErrors(u: unknown, what: string | undefined, errors: string[]) {
     return (
         collect(u, v => typeof v === 'object', errors, what, 'must be an object') &&
@@ -223,6 +247,41 @@ function isTSNWithErrors(u: unknown, what: string | undefined, errors: string[])
     )
 }
 
+function isASWithErrors(u: unknown, what: string | undefined, errors: string[]) {
+    return (
+        collect(u, v => Array.isArray(v), errors, what, 'must be an array') &&
+        inferArrayMembers(u, (u, ix) =>
+            collect(u, v => typeof v === 'string', errors, indexOf(what, ix), 'must be a string'),
+        )
+    )
+}
+
+function isANWithErrors(u: unknown, what: string | undefined, errors: string[]) {
+    return (
+        collect(u, v => Array.isArray(v), errors, what, 'must be an array') &&
+        inferArrayMembers(u, (u, ix) =>
+            collect(u, v => typeof v === 'number', errors, indexOf(what, ix), 'must be a number'),
+        )
+    )
+}
+
+function isAOWithErrors(u: unknown, what: string | undefined, errors: string[]) {
+    return (
+        collect(u, v => Array.isArray(v), errors, what, 'must be an array') &&
+        inferArrayMembers(
+            u,
+            (u, ix) =>
+                collect(
+                    u,
+                    v => typeof v === 'object',
+                    errors,
+                    indexOf(what, ix),
+                    'must be an object',
+                ) && collect(u, v => v !== null, errors, indexOf(what, ix), 'must not be null'),
+        )
+    )
+}
+
 function inferObjectMember<
     K extends PropertyKey,
     T extends {
@@ -246,6 +305,13 @@ function inferObjectMembers<T extends object, Inferred>(
     [P in string]: Inferred
 } {
     return Object.entries(obj).every(kv => fn(...kv))
+}
+
+function inferArrayMembers<T extends unknown[], Inferred>(
+    array: T,
+    fn: (value: unknown, ix: number) => value is Inferred,
+): array is T & Inferred[] {
+    return array.every(fn)
 }
 
 function inferTupleMember<

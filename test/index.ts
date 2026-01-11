@@ -8,7 +8,13 @@ import ts, { SyntaxKind } from 'typescript'
 import { create } from '../index.js'
 import { assertIsS } from './data/nested-objects.rt.js'
 import { assertIsUL, assertIsUNS, assertIsUON, assertIsUOO } from './data/sets.rt.js'
-import { assertIsOM, assertIsOSS, assertIsT, assertIsTSS } from './data/simple-objects.rt.js'
+import {
+    assertIsAS,
+    assertIsOM,
+    assertIsOSS,
+    assertIsT,
+    assertIsTSS,
+} from './data/simple-objects.rt.js'
 
 const fileCases = await readdir('test/data/')
 
@@ -69,6 +75,15 @@ describe('errors', () => {
             [assertIsTSS, ['3'], ['testCase[1] must be a string']],
             [assertIsTSS, ['3', 3], ['testCase[1] must be a string']],
             [assertIsTSS, ['3', '3 '], []],
+            [assertIsAS, 3, ['testCase must be an array']],
+            [assertIsAS, [], []],
+            [assertIsAS, 3, ['testCase must be an array']],
+            [assertIsAS, '3', ['testCase must be an array']],
+            [assertIsAS, {}, ['testCase must be an array']],
+            [assertIsAS, [3], ['testCase[0] must be a string']],
+            [assertIsAS, ['3'], []],
+            [assertIsAS, ['3', 3], ['testCase[1] must be a string']],
+            [assertIsAS, ['3', '3 '], []],
             [assertIsUNS, true, ['testCase must be a number, or testCase must be a string']],
             [assertIsUNS, '3', []],
             [assertIsUON, {}, ['testCase must contain a, or testCase must be a number']],
